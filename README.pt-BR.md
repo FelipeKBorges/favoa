@@ -18,7 +18,7 @@
 - **Captura por linguagem natural:** interpretador de frases por regras (offline e determinístico), com prévia ao vivo e desfazer.
 - **Web Push sem pacotes:** criptografia RFC 8291 e assinatura VAPID RFC 8292.
 - **Dados seguros:** migrações versionadas, backup diário consistente do SQLite, exportação/importação JSON versionada e validada, CSV pronto para o Excel, cópia opcional no OneDrive.
-- **220 testes** xUnit sobre os serviços reais com SQLite em memória.
+- **Mais de 300 casos de teste** xUnit sobre os serviços reais com SQLite em memória.
 - **Registro de decisões** com o motivo de cada escolha em [docs/DECISOES.md](docs/DECISOES.md).
 
 ## Rodar

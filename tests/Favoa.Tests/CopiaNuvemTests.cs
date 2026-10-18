@@ -38,7 +38,14 @@ public sealed class CopiaNuvemTests : IAsyncLifetime
     {
         await _sp.DisposeAsync();
         SqliteConnection.ClearAllPools();
-        try { Directory.Delete(_raiz, true); } catch (IOException) { }
+        // O git deixa os objetos como somente leitura no Windows: sem tirar o atributo, o Delete recusa.
+        try
+        {
+            foreach (var arquivo in Directory.EnumerateFiles(_raiz, "*", SearchOption.AllDirectories))
+                File.SetAttributes(arquivo, FileAttributes.Normal);
+            Directory.Delete(_raiz, true);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
     }
 
     private void Git(params string[] args)

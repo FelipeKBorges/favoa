@@ -29,7 +29,7 @@ Built for my own household: one process, one SQLite file, no cloud dependency, u
 | **Web Push** | Phone notifications with no third-party package: message encryption (RFC 8291, aes128gcm) and VAPID signing (RFC 8292) |
 | **Data safety** | Versioned EF Core migrations (including adoption of pre-migration databases), daily consistent SQLite backups via the backup API, versioned JSON export/import validated before a transactional replace, CSV export ready for Excel in pt-BR, optional OneDrive mirror |
 | **Domain care** | Money stored as `long` cents, `DateOnly` for business dates, UTC timestamps, accent-insensitive name matching, Brazilian TACO food table embedded for offline use |
-| **Testing** | 220 xUnit tests running the real services on in-memory SQLite, not mocks |
+| **Testing** | 300+ xUnit test cases running the real services on in-memory SQLite, not mocks |
 | **Decisions** | Every architectural choice is recorded with its reason in [docs/DECISOES.md](docs/DECISOES.md) (ADR-style log) |
 
 ## Architecture
