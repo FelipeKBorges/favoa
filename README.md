@@ -4,60 +4,60 @@
 ![.NET 10](https://img.shields.io/badge/.NET-10-512BD4)
 ![Blazor Server](https://img.shields.io/badge/Blazor-Server-512BD4)
 ![SQLite](https://img.shields.io/badge/SQLite-EF%20Core-003B57)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Licença: MIT](https://img.shields.io/badge/Licen%C3%A7a-MIT-yellow.svg)](LICENSE)
 
-🇧🇷 [Leia em português](README.pt-BR.md)
+🇺🇸 [Read in English](README.en.md)
 
-**A local-first life dashboard: finances, tasks, habits, workouts and diet in one place, running on my own PC.** Each area of life is a cell in a honeycomb that fills up as the day gets done. You log things by typing plain sentences (`uber 23`, `squat 5x5 100kg`, `drank 500 ml`), and a hand-written MCP server exposes the data for reading and updating.
+**Painel pessoal de gestão da vida, local: finanças, tarefas, hábitos, treino e dieta num lugar só, rodando no próprio PC.** Cada área da vida é uma célula de uma colmeia que enche conforme o dia é cumprido. Os registros são feitos com frases simples (`uber 23`, `agachamento 5x5 100kg`, `bebi 500 ml`), e um servidor MCP escrito à mão expõe os dados para consulta e atualização.
 
-Built for my own household: one process, one SQLite file, no cloud dependency, usable from the PC and from the phone.
+Feito para uso da minha casa: um processo, um arquivo SQLite, nenhuma dependência de nuvem, com acesso pelo PC e pelo celular.
 
-<!-- Screenshots: add images to docs/img/ and uncomment
-![Honeycomb dashboard](docs/img/colmeia.png)
-![Quick capture](docs/img/captura.gif)
+<!-- Screenshots: coloque as imagens em docs/img/ e descomente
+![Colmeia](docs/img/colmeia.png)
+![Captura por frase](docs/img/captura.gif)
 -->
 
-## Highlights
+## Destaques técnicos
 
-| Area | What's in it |
+| Área | O que tem |
 |---|---|
-| **Architecture** | Layered .NET 10 solution: `Core` (domain and pure rules), `Data` (EF Core services), `Web` (Blazor Server), `Mcp` (stdio server). Services split by area behind narrow interfaces |
-| **Multi-tenancy** | Data isolated per household and per person with EF Core global query filters. Owners are filled in automatically on `SaveChanges`. Fails closed: with no logged-in user the context uses an id that matches nothing. Every new personal entity gets an isolation test |
-| **Security** | E-mail and password login with PBKDF2-SHA256 (210k iterations), progressive lockout per account and per origin, HttpOnly + SameSite=Strict cookie revalidated on every request (changing the password signs out every device), open-redirect protection, invite codes stored only as hashes |
-| **MCP server** | Model Context Protocol server written from scratch (JSON-RPC 2.0 over stdin/stdout, no SDK) with 13 tools. Short text replies to save context, and every write tool requires the user's approval |
-| **Natural-language capture** | Rule-based sentence parser (offline, deterministic) for expenses, income, water, tasks, habits, strength and cardio sessions, meals and weight, with live preview and one-click undo |
-| **Web Push** | Phone notifications with no third-party package: message encryption (RFC 8291, aes128gcm) and VAPID signing (RFC 8292) |
-| **Data safety** | Versioned EF Core migrations (including adoption of pre-migration databases), daily consistent SQLite backups via the backup API, versioned JSON export/import validated before a transactional replace, CSV export ready for Excel in pt-BR, optional OneDrive mirror |
-| **Domain care** | Money stored as `long` cents, `DateOnly` for business dates, UTC timestamps, accent-insensitive name matching, Brazilian TACO food table embedded for offline use |
-| **Testing** | 300+ xUnit test cases running the real services on in-memory SQLite, not mocks |
-| **Decisions** | Every architectural choice is recorded with its reason in [docs/DECISOES.md](docs/DECISOES.md) (ADR-style log) |
+| **Arquitetura** | Solução .NET 10 em camadas: `Core` (domínio e regras puras), `Data` (serviços com EF Core), `Web` (Blazor Server) e `Mcp` (servidor stdio). Serviços separados por área, atrás de interfaces enxutas |
+| **Multi-tenant** | Isolamento por família e por pessoa com filtros globais do EF Core. Dono preenchido automaticamente no `SaveChanges`. Falha fechada: sem usuário logado, o contexto usa um id que não existe. Todo dado pessoal novo ganha teste de separação |
+| **Segurança** | Login por e-mail e senha com PBKDF2-SHA256 (210 mil iterações), bloqueio progressivo por conta e por origem, cookie HttpOnly + SameSite=Strict revalidado a cada pedido (trocar a senha desconecta todos os aparelhos), proteção contra redirecionamento aberto, convites guardados só como hash |
+| **Servidor MCP** | Servidor Model Context Protocol escrito do zero (JSON-RPC 2.0 por stdin/stdout, sem SDK) com 13 ferramentas. Respostas em texto curto para economizar contexto; toda ferramenta que grava pede aprovação do usuário |
+| **Captura por linguagem natural** | Interpretador de frases por regras (offline e determinístico) para despesas, receitas, água, tarefas, hábitos, treinos de força e cardio, refeições e peso, com prévia ao vivo e desfazer |
+| **Web Push** | Notificações no celular sem pacote de terceiros: criptografia da mensagem (RFC 8291, aes128gcm) e assinatura VAPID (RFC 8292) |
+| **Dados seguros** | Migrações EF Core versionadas (com adoção de bancos anteriores às migrações), backup diário consistente pela API de backup do SQLite, exportação/importação JSON versionada e validada antes de substituir numa transação, CSV pronto para o Excel em português, cópia opcional no OneDrive |
+| **Cuidado com o domínio** | Dinheiro em centavos (`long`), `DateOnly` para datas de negócio, carimbos em UTC, comparação de nomes sem acento e sem maiúsculas, tabela de alimentos TACO embutida para uso offline |
+| **Testes** | Mais de 300 casos de teste xUnit sobre os serviços reais com SQLite em memória, sem mocks |
+| **Decisões** | Cada escolha de arquitetura registrada com o motivo em [docs/DECISOES.md](docs/DECISOES.md) |
 
-## Architecture
+## Arquitetura
 
 ```
-Browser (PC or phone via Tailscale, installable PWA)
+Navegador (PC ou celular via Tailscale, instalável como PWA)
    │  SignalR (Blazor Server)
    ▼
-Favoa.Web ── Razor components, login, cookie auth
+Favoa.Web ── componentes Razor, login, autenticação por cookie
    │
    ▼
-Favoa.Data ── EF Core services, migrations, backups, Web Push ──► SQLite (one local file)
+Favoa.Data ── serviços EF Core, migrações, backups, Web Push ──► SQLite (um arquivo local)
    ▲
    │
-Favoa.Mcp ── MCP server (stdio)
+Favoa.Mcp ── servidor MCP (stdio)
 
-Favoa.Core ── entities, sentence parser, honeycomb calculation (no dependencies)
+Favoa.Core ── entidades, interpretador de frases, cálculo da colmeia (sem dependências)
 ```
 
-More detail in [docs/ARQUITETURA.md](docs/ARQUITETURA.md).
+Mais detalhes em [docs/ARQUITETURA.md](docs/ARQUITETURA.md).
 
-## Tech stack
+## Tecnologias
 
-C# · .NET 10 · ASP.NET Core · Blazor Server · Entity Framework Core · SQLite · xUnit · Model Context Protocol · Web Push / PWA · PowerShell (install and update scripts)
+C# · .NET 10 · ASP.NET Core · Blazor Server · Entity Framework Core · SQLite · xUnit · Model Context Protocol · Web Push / PWA · GitHub Actions · PowerShell (scripts de instalação e atualização)
 
-## Run it
+## Rodar
 
-Requires the [.NET 10 SDK](https://dotnet.microsoft.com/download).
+Pré-requisito: [.NET 10 SDK](https://dotnet.microsoft.com/download).
 
 ```powershell
 git clone https://github.com/FelipeKBorges/favoa.git
@@ -66,17 +66,15 @@ dotnet test
 dotnet run --project src\Favoa.Web
 ```
 
-Open http://localhost:5080, create your household on first access, then press **Ctrl + K** and type what happened.
+Abra http://localhost:5080, crie sua casa no primeiro acesso, aperte **Ctrl + K** e escreva o que aconteceu.
 
-## Documentation
+## Documentação
 
-- [docs/MANUAL.md](docs/MANUAL.md): user guide (Portuguese): capture sentences, every screen, phone access, MCP setup, backups
-- [docs/ARQUITETURA.md](docs/ARQUITETURA.md): architecture and data model
-- [docs/DECISOES.md](docs/DECISOES.md): decision log
-- [docs/MVP.md](docs/MVP.md): scope and roadmap
+- [docs/MANUAL.md](docs/MANUAL.md): manual de uso completo (frases da captura, telas, celular, MCP, backups)
+- [docs/ARQUITETURA.md](docs/ARQUITETURA.md): arquitetura e modelo de dados
+- [docs/DECISOES.md](docs/DECISOES.md): registro de decisões
+- [docs/MVP.md](docs/MVP.md): escopo e próximos passos
 
-The domain and the UI are in Portuguese because the app was built for my own use in Brazil.
+## Licença
 
-## License
-
-[MIT](LICENSE). Bundled third-party data and fonts keep their own licenses: the TACO food table via taco-api (MIT), and the Bricolage Grotesque and Manrope fonts (SIL OFL).
+[MIT](LICENSE). Dados e fontes de terceiros mantêm suas licenças: tabela TACO via taco-api (MIT) e fontes Bricolage Grotesque e Manrope (SIL OFL).
