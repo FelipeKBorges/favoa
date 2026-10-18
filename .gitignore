@@ -486,5 +486,6 @@ $RECYCLE.BIN/
 *.db-shm
 *.db-wal
 
+
 # Chaves do Data Protection (cookies de login)
 chaves/

@@ -131,3 +131,7 @@ Formato: data · decisão · motivo.
 - O modelo de famílias e o login por e-mail e senha ficam: protegem o acesso pela rede e deixam convidar outras pessoas da casa. O cadastro aberto (`CadastroAberto`) continua desligado.
 - Recuperação de senha pela linha de comando (`--redefinir-senha`) basta; e-mail de recuperação só entra se a nuvem voltar à pauta.
 - Itens do plano que ainda valem no uso pessoal: teste que garante filtro de família em toda entidade, tela de sessões e segurança, backup antes de atualizar (o atualizador já faz). Cálculos de custo e receita da conversa de hoje (infra US$ 15–100/mês para 500 famílias; anúncios US$ 30–80/mês) ficam como referência caso a decisão mude.
+
+## 2026-10-18 — O mesmo MCP em mais de um cliente
+
+- Todos os clientes MCP usam a mesma DLL publicada em `%LOCALAPPDATA%\Favoa\mcp`: não há um segundo servidor.
