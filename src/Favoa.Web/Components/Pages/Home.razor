@@ -1,0 +1,187 @@
+@page "/"
+@implements IDisposable
+@inject IFavoaServico Servico
+@inject EventosFavoa Eventos
+@inject Favoa.Core.Acesso.IAcessoServico Acesso
+@inject Favoa.Core.Pessoas.IPessoaAtual PessoaAtual
+
+<PageTitle>Fávoa</PageTitle>
+
+@if (_preferencias.Tela == TelaInicial.Calendario)
+{
+    <main class="inicio inicio--calendario">
+        <div class="inicio__cabeca">
+            <div class="saudacao">
+                <h1 id="titulo-dia">@Saudacao</h1>
+                @if (_painel is not null)
+                {
+                    <p>Hoje a colmeia está em <strong>@_painel.Centro.Percentual%</strong>. Escolha um dia para ver e planejar.</p>
+                }
+            </div>
+            <EscolhaTela Tela="_preferencias.Tela" AoEscolher="TrocarTela" />
+        </div>
+        <AcoesRapidas />
+        <PrimeirosPassos />
+        <ProximaAcao />
+        <a class="semana-link" href="/semana">Ver o resumo da semana →</a>
+        <CalendarioInicio Visao="_preferencias.Visao" AoTrocarVisao="TrocarVisao" />
+    </main>
+}
+else
+{
+<main class="inicio">
+    <section class="inicio__dia" aria-labelledby="titulo-dia">
+        <div class="inicio__cabeca">
+            <div class="saudacao">
+                <h1 id="titulo-dia">@Saudacao</h1>
+                @if (_painel is not null)
+                {
+                    <p>Cada célula enche conforme você cumpre o dia. Hoje a colmeia está em <strong>@_painel.Centro.Percentual%</strong>.</p>
+                }
+            </div>
+            <EscolhaTela Tela="_preferencias.Tela" AoEscolher="TrocarTela" />
+        </div>
+        <AcoesRapidas />
+        <PrimeirosPassos />
+        <ProximaAcao />
+        <a class="semana-link" href="/semana">Ver o resumo da semana →</a>
+
+        @if (_painel is null)
+        {
+            <p class="carregando">Carregando a colmeia…</p>
+        }
+        else
+        {
+            <Colmeia Celulas="_painel.Celulas" />
+        }
+    </section>
+
+    @if (_painel is not null)
+    {
+        <button type="button" class="agora-botao so-celular" aria-expanded="@_resumoAberto" @onclick="() => _resumoAberto = !_resumoAberto">
+            @(_resumoAberto ? "Esconder o resumo do dia" : "Ver o resumo do dia")
+        </button>
+        <aside class="agora @(_resumoAberto ? "" : "agora--recolhido")" aria-label="Resumo do dia">
+            <h2>Resumo</h2>
+
+            <div class="cartao">
+                <div class="rotulo">Próximas tarefas</div>
+                @if (_painel.ProximasTarefas.Count == 0)
+                {
+                    <p class="vazio">Nenhuma tarefa. Experimente: <em>tarefa pagar luz sexta</em></p>
+                }
+                @foreach (var t in _painel.ProximasTarefas)
+                {
+                    <div class="tarefa">
+                        <label class="tarefa__marcar">
+                            <input type="checkbox" @onchange="() => AlternarTarefa(t.Id)" />
+                            <span class="tarefa__titulo">@t.Titulo</span>
+                        </label>
+                        <span class="tarefa__prazo @(t.Atrasada ? "tarefa__prazo--atrasada" : "")">@Prazo(t)</span>
+                        <button type="button" class="botao-icone botao-icone--discreto" aria-label="Editar tarefa @t.Titulo"
+                                @onclick="() => Eventos.SolicitarEdicao(new(Favoa.Core.Edicao.TipoReferencia.Tarefa, t.Id))">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4z" /><path d="M14 6l4 4" /></svg>
+                        </button>
+                    </div>
+                }
+            </div>
+
+            <div class="cartao">
+                <div class="rotulo">Hábitos que faltam</div>
+                @if (_painel.HabitosPendentes.Count == 0)
+                {
+                    <p class="vazio">@(_painel.Resumo.HabitosAtivos == 0 ? "Crie o primeiro: novo hábito ler 20 min" : "Todos feitos hoje.")</p>
+                }
+                <div class="pilulas">
+                    @foreach (var h in _painel.HabitosPendentes)
+                    {
+                        <button type="button" class="pilula" @onclick="() => AlternarHabito(h.Id)">@h.Nome</button>
+                    }
+                </div>
+            </div>
+
+            <div class="cartao">
+                <div class="rotulo">Últimos registros</div>
+                @if (_painel.Recentes.Count == 0)
+                {
+                    <p class="vazio">Use <AtalhoCaptura /> e conte o que aconteceu.</p>
+                }
+                @foreach (var r in _painel.Recentes)
+                {
+                    <button type="button" class="registro" aria-label="Editar @r.Descricao, @r.Valor" @onclick="() => Eventos.SolicitarEdicao(r.Referencia)">
+                        <span>@r.Descricao</span><span class="registro__valor">@r.Valor</span>
+                    </button>
+                }
+            </div>
+        </aside>
+    }
+</main>
+}
+
+@code {
+    private PainelDoDia? _painel;
+    private bool _resumoAberto;
+    private PreferenciasInicio _preferencias = PreferenciasInicio.Padrao;
+
+    private string Saudacao
+    {
+        get
+        {
+            var hora = DateTime.Now.Hour;
+            var parte = hora < 12 ? "Bom dia" : hora < 18 ? "Boa tarde" : "Boa noite";
+            return string.IsNullOrWhiteSpace(_nome) ? $"{parte}." : $"{parte}, {_nome}.";
+        }
+    }
+
+    private string? _nome;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _nome = (await Acesso.ObterEstadoAsync(PessoaAtual.FamiliaId)).Pessoas.FirstOrDefault(p => p.Id == PessoaAtual.Id)?.Nome;
+        _preferencias = await Servico.ObterPreferenciasInicioAsync();
+        Eventos.RegistroSalvo += Recarregar;
+        await Recarregar();
+    }
+
+    private async Task Recarregar()
+    {
+        _painel = await Servico.ObterPainelAsync(EventosFavoa.Hoje);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task AlternarTarefa(Guid id)
+    {
+        await Servico.AlternarTarefaAsync(id, EventosFavoa.Hoje);
+        await Recarregar();
+    }
+
+    private async Task AlternarHabito(Guid id)
+    {
+        await Servico.AlternarHabitoAsync(id, EventosFavoa.Hoje);
+        await Recarregar();
+    }
+
+    private static string Prazo(TarefaResumo t)
+    {
+        if (t.Prazo is not { } p) return "";
+        var hoje = EventosFavoa.Hoje;
+        if (p == hoje) return "hoje";
+        if (p == hoje.AddDays(-1)) return "ontem";
+        if (p == hoje.AddDays(1)) return "amanhã";
+        return p.ToString("dd/MM");
+    }
+
+    private async Task TrocarTela(TelaInicial tela)
+    {
+        _preferencias = _preferencias with { Tela = tela };
+        await Servico.SalvarPreferenciasInicioAsync(_preferencias);
+    }
+
+    private async Task TrocarVisao(VisaoCalendario visao)
+    {
+        _preferencias = _preferencias with { Visao = visao };
+        await Servico.SalvarPreferenciasInicioAsync(_preferencias);
+    }
+
+    public void Dispose() => Eventos.RegistroSalvo -= Recarregar;
+}

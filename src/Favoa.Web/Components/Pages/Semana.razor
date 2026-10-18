@@ -1,0 +1,97 @@
+@page "/semana"
+@using Favoa.Core.Captura
+@using Favoa.Core.Painel
+@inject IFavoaServico Servico
+
+<PageTitle>Resumo da semana · Fávoa</PageTitle>
+
+<main class="modulo">
+    <header class="pagina__topo">
+        <div class="pagina__titulo">
+            <h1>Resumo da semana</h1>
+            @if (_r is not null)
+            {
+                <p class="pagina__resumo"><span>@_r.Inicio.ToString("dd/MM") a @_r.Fim.ToString("dd/MM")</span></p>
+            }
+        </div>
+    </header>
+
+    @if (_r is null)
+    {
+        <p class="carregando">Carregando…</p>
+    }
+    else
+    {
+        <div class="semana">
+            <section class="cartao semana__bloco">
+                <h2>Gastos</h2>
+                <p class="semana__numero">@Texto.FormatarMoeda(_r.GastoCentavos)</p>
+                <p class="semana__nota">@Comparar(_r.GastoCentavos, _r.GastoAnteriorCentavos)</p>
+            </section>
+            <section class="cartao semana__bloco">
+                <h2>Treinos</h2>
+                <p class="semana__numero">@_r.Treinos</p>
+                <p class="semana__nota">@(_r.TreinosAnteriores) na semana anterior@(_r.GastoTreinoKcal > 0 ? $" · {_r.GastoTreinoKcal} kcal gastas" : "")</p>
+            </section>
+            <section class="cartao semana__bloco">
+                <h2>Hábitos</h2>
+                @if (_r.HabitosPossiveis == 0)
+                {
+                    <p class="semana__nota">Nenhum hábito criado ainda. <a href="/habitos">Criar o primeiro</a></p>
+                }
+                else
+                {
+                    <p class="semana__numero">@_r.HabitosPct%</p>
+                    <p class="semana__nota">@_r.HabitosFeitos de @_r.HabitosPossiveis marcações possíveis</p>
+                }
+            </section>
+            <section class="cartao semana__bloco">
+                <h2>Dieta</h2>
+                @if (_r.DiasComDieta == 0)
+                {
+                    <p class="semana__nota">Nenhuma refeição registrada na semana.</p>
+                }
+                else
+                {
+                    <p class="semana__numero">@_r.MediaKcal kcal</p>
+                    <p class="semana__nota">média em @_r.DiasComDieta dia(s) com registro@(_r.MetaKcal > 0 ? $" · meta {_r.MetaKcal} kcal" : "")</p>
+                }
+            </section>
+            <section class="cartao semana__bloco">
+                <h2>Tarefas</h2>
+                <p class="semana__numero">@_r.TarefasConcluidas</p>
+                <p class="semana__nota">concluídas na semana</p>
+            </section>
+            @if (_peso is not null)
+            {
+                <section class="cartao semana__bloco">
+                    <h2>Peso</h2>
+                    <p class="semana__numero">@_peso.Value.ToString("0.0") kg</p>
+                    <p class="semana__nota">último registro</p>
+                </section>
+            }
+        </div>
+    }
+</main>
+
+@code {
+    [Inject] private Favoa.Core.Fitness.IFitnessServico Fitness { get; set; } = default!;
+    private ResumoSemana? _r;
+    private decimal? _peso;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var hoje = EventosFavoa.Hoje;
+        _r = await Servico.ObterResumoSemanaAsync(hoje);
+        try { _peso = (await Fitness.ObterPesosAsync(30, hoje)).Atual?.Kg; } catch { }
+    }
+
+    private static string Comparar(long atual, long anterior)
+    {
+        if (anterior == 0) return "sem gastos na semana anterior para comparar";
+        var dif = atual - anterior;
+        if (dif == 0) return "igual à semana anterior";
+        var pct = (int)Math.Round(100.0 * Math.Abs(dif) / anterior);
+        return $"{pct}% {(dif > 0 ? "a mais" : "a menos")} que a semana anterior ({Texto.FormatarMoeda(anterior)})";
+    }
+}

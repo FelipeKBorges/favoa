@@ -1,0 +1,149 @@
+@implements IDisposable
+@inject IFitnessServico Fitness
+@inject IFavoaServico Servico
+@inject EventosFavoa Eventos
+@using Favoa.Core.Fitness
+
+@* "O que fazer agora": até 3 sugestões do momento, cada uma com um toque. Some quando não há nada a sugerir. *@
+@if (_itens.Count > 0)
+{
+    <section class="proxima" aria-label="O que fazer agora">
+        <h2 class="proxima__titulo">Agora</h2>
+        <ul class="proxima__lista">
+            @foreach (var i in _itens)
+            {
+                <li class="proxima__item">
+                    <div class="proxima__texto">
+                        <span class="proxima__nome">@i.Titulo</span>
+                        @if (i.Detalhe is not null) { <span class="dados__meta">@i.Detalhe</span> }
+                    </div>
+                    <div class="proxima__acoes">
+                        @foreach (var a in i.Acoes)
+                        {
+                            var acao = a;
+                            if (acao.Href is not null)
+                            {
+                                <a class="botao botao--pequeno @(acao.Principal ? "botao--primario" : "botao--fantasma")" href="@acao.Href">@acao.Rotulo</a>
+                            }
+                            else
+                            {
+                                <button type="button" class="botao botao--pequeno @(acao.Principal ? "botao--primario" : "botao--fantasma")" @onclick="acao.Fazer">@acao.Rotulo</button>
+                            }
+                        }
+                    </div>
+                </li>
+            }
+        </ul>
+    </section>
+}
+
+@code {
+    private sealed record Acao(string Rotulo, string? Href, Func<Task>? Fazer, bool Principal);
+    private sealed record Sugestao(string Titulo, string? Detalhe, List<Acao> Acoes);
+
+    private List<Sugestao> _itens = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        Eventos.RegistroSalvo += Recarregar;
+        await Calcular();
+    }
+
+    private async Task Recarregar()
+    {
+        await Calcular();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private static Refeicao? RefeicaoDaHora(int hora) => hora switch
+    {
+        >= 5 and < 11 => Refeicao.CafeDaManha,
+        >= 11 and < 15 => Refeicao.Almoco,
+        >= 15 and < 18 => Refeicao.LancheTarde,
+        >= 18 and < 23 => Refeicao.Jantar,
+        _ => null,
+    };
+
+    private async Task Calcular()
+    {
+        var hoje = EventosFavoa.Hoje;
+        var hora = DateTime.Now.Hour;
+        var lista = new List<Sugestao>();
+
+        // 1. Refeição do momento ainda sem registro.
+        if (RefeicaoDaHora(hora) is { } refeicao)
+        {
+            var dia = await Fitness.ObterDiaDietaAsync(hoje);
+            var r = dia.Refeicoes.FirstOrDefault(x => x.Refeicao == refeicao);
+            if (r is not null && r.Consumido.Count == 0)
+            {
+                var ontem = (await Fitness.ObterDiaDietaAsync(hoje.AddDays(-1))).Refeicoes.FirstOrDefault(x => x.Refeicao == refeicao);
+                var acoes = new List<Acao>();
+                if (r.Plano.Count > 0) acoes.Add(new("Segui o plano", null, () => Rodar(Fitness.SeguirPlanoAsync(hoje, refeicao)), true));
+                if (ontem is { Consumido.Count: > 0 }) acoes.Add(new("Copiar de ontem", null, () => Rodar(Fitness.CopiarRefeicaoAsync(hoje.AddDays(-1), hoje, refeicao)), r.Plano.Count == 0));
+                acoes.Add(new("Registrar", "dieta", null, acoes.Count == 0));
+                lista.Add(new($"{r.Nome} ainda sem registro", ontem is { Consumido.Count: > 0 } ? $"ontem: {string.Join(", ", ontem.Consumido.Take(2).Select(c => c.Alimento))}" : null, acoes));
+            }
+        }
+
+        // 2. Tarefas atrasadas, todas de uma vez.
+        var quadro = await Servico.ObterQuadroTarefasAsync(hoje);
+        if (quadro.Atrasadas.Count > 0)
+        {
+            var ids = quadro.Atrasadas.Select(t => t.Id).ToList();
+            lista.Add(new(quadro.Atrasadas.Count == 1 ? "1 tarefa atrasada" : $"{quadro.Atrasadas.Count} tarefas atrasadas", null,
+            [
+                new("Passar para hoje", null, () => AdiarParaHoje(ids), true),
+                new("Ver", "tarefas", null, false),
+            ]));
+        }
+
+        // 3. Primeiro hábito que falta hoje (um toque; os demais ficam no Resumo).
+        var painel = await Servico.ObterPainelAsync(hoje);
+        if (painel.HabitosPendentes.Count > 0)
+        {
+            var h = painel.HabitosPendentes[0];
+            var mais = painel.HabitosPendentes.Count - 1;
+            lista.Add(new($"Hábito: {h.Nome}", mais > 0 ? $"mais {mais} hoje" : null,
+            [
+                new("Fiz", null, () => FazerHabito(h.Id), true),
+            ]));
+        }
+
+        // 4. Treino do dia ainda não registrado.
+        if (hora is >= 5 and < 22)
+        {
+            var treino = await Fitness.ObterPainelTreinoAsync(hoje);
+            var fezHoje = treino.Recentes.Count > 0 && treino.Recentes[0].Data == hoje;
+            if (!fezHoje && !(treino.MetaSemana > 0 && treino.TreinosUltimos7Dias >= treino.MetaSemana))
+            {
+                var detalhe = treino.MetaSemana > 0 ? $"{treino.TreinosUltimos7Dias} de {treino.MetaSemana} nos últimos 7 dias" : null;
+                lista.Add(new(treino.ProximaFicha is { } f ? $"Treino de hoje: {f.Nome}" : "Registrar o treino de hoje", detalhe, [new("Abrir treino", "treino", null, false)]));
+            }
+        }
+
+        _itens = lista.Take(3).ToList();
+    }
+
+    private async Task Rodar(Task<ResultadoRegistro> tarefa)
+    {
+        var r = await tarefa;
+        Eventos.MostrarMensagem(r.Mensagem, r.Sucesso ? r.Criado : null);
+        if (r.Sucesso) await Eventos.NotificarRegistroSalvoAsync();
+    }
+
+    private async Task FazerHabito(Guid id)
+    {
+        await Servico.AlternarHabitoAsync(id, EventosFavoa.Hoje);
+        await Eventos.NotificarRegistroSalvoAsync();
+    }
+
+    private async Task AdiarParaHoje(List<Guid> ids)
+    {
+        foreach (var id in ids) await Servico.DefinirPrazoTarefaAsync(id, EventosFavoa.Hoje);
+        Eventos.MostrarMensagem(ids.Count == 1 ? "1 tarefa passou para hoje." : $"{ids.Count} tarefas passaram para hoje.");
+        await Eventos.NotificarRegistroSalvoAsync();
+    }
+
+    public void Dispose() => Eventos.RegistroSalvo -= Recarregar;
+}

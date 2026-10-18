@@ -1,0 +1,39 @@
+@using Favoa.Core.Acesso
+@using Favoa.Core.Pessoas
+@inject IAcessoServico Acesso
+@inject IPessoaAtual PessoaAtual
+@inject NavigationManager Nav
+
+@if (_atual is not null)
+{
+    <div class="pessoa-topo">
+        <button type="button" class="avatar avatar--botao" style="--cor-pessoa:@_atual.Cor" aria-haspopup="menu" aria-expanded="@_aberto"
+                aria-label="@($"{_atual.Nome}: conta e saída")" title="@_atual.Nome" @onclick="() => _aberto = !_aberto">@_atual.Inicial</button>
+        @if (_aberto)
+        {
+            <div class="pessoa-topo__fundo" @onclick="() => _aberto = false"></div>
+            <div class="pessoa-topo__menu" role="menu">
+                <div class="pessoa-topo__titulo">@_atual.Nome</div>
+                <button type="button" role="menuitem" class="pessoa-topo__opcao" @onclick='() => Ir("/dados")'>Meu acesso e pessoas</button>
+                <button type="button" role="menuitem" class="pessoa-topo__opcao" @onclick='() => Nav.NavigateTo("/sair", forceLoad: true)'>Sair</button>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private PessoaInfo? _atual;
+    private bool _aberto;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var pessoas = (await Acesso.ObterEstadoAsync(PessoaAtual.FamiliaId)).Pessoas;
+        _atual = pessoas.FirstOrDefault(p => p.Id == PessoaAtual.Id);
+    }
+
+    private void Ir(string url)
+    {
+        _aberto = false;
+        Nav.NavigateTo(url);
+    }
+}

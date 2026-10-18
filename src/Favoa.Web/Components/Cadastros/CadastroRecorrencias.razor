@@ -1,0 +1,206 @@
+@using Favoa.Core.Financas
+@inject ICadastrosServico Cadastros
+@inject IFavoaServico Servico
+@inject EventosFavoa Eventos
+
+@if (_quadro is null)
+{
+    <p class="carregando">Carregando…</p>
+}
+else
+{
+    <section class="cartao cadastro cadastro--estreito" aria-labelledby="rec-titulo">
+        <div class="cadastro__topo">
+            <h2 id="rec-titulo">Lançamentos recorrentes</h2>
+            <button type="button" class="botao botao--fantasma botao--pequeno" @onclick="Novo">+ Nova</button>
+        </div>
+        <p class="cadastro__dica">Aluguel, internet, assinaturas, salário: o Fávoa lança sozinho todo mês no dia certo. Se você apagar um lançamento gerado, ele não volta.</p>
+
+        @if (_editando is { Id: null } novo) { @Formulario(novo) }
+
+        @if (_quadro.Recorrencias.Count == 0 && _editando is null)
+        {
+            <p class="vazio">Nenhuma ainda. Também dá para marcar <em>Repetir todo mês</em> ao lançar em Finanças.</p>
+        }
+
+        <ul class="cadastro__lista">
+            @foreach (var r in _quadro.Recorrencias)
+            {
+                <li class="cadastro__item @(r.Ativa ? "" : "cadastro__item--arquivado")">
+                    @if (_editando is { } e && e.Id == r.Id)
+                    {
+                        @Formulario(e)
+                    }
+                    else if (_excluindo == r.Id)
+                    {
+                        <div class="cadastro__confirmar">
+                            <span>Excluir <strong>@r.Descricao</strong>? Os lançamentos já feitos ficam.</span>
+                            <div class="cadastro__acoes">
+                                <button type="button" class="botao botao--perigo botao--pequeno" @onclick="() => Excluir(r)">Excluir</button>
+                                <button type="button" class="botao botao--fantasma botao--pequeno" @onclick="Cancelar">Cancelar</button>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="cadastro__texto">
+                            <span class="cadastro__nome">@r.Descricao
+                                <span class="cadastro__valor @(r.Tipo == TipoLancamento.Receita ? "cadastro__valor--receita" : "")">@(r.Tipo == TipoLancamento.Receita ? "+" : "−") @Texto.FormatarMoeda(r.ValorCentavos)</span>
+                            </span>
+                            <span class="cadastro__sub">Todo dia @r.DiaDoMes · @r.Categoria · @r.Conta · @(r.Ativa ? $"próxima {r.Proxima:dd/MM}" : "pausada")</span>
+                        </div>
+                        <div class="cadastro__acoes">
+                            <button type="button" class="botao botao--fantasma botao--pequeno" @onclick="() => Ativar(r, !r.Ativa)">@(r.Ativa ? "Pausar" : "Retomar")</button>
+                            <button type="button" class="botao-icone" aria-label="Editar @r.Descricao" @onclick="() => Editar(r)">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z" /></svg>
+                            </button>
+                            <button type="button" class="botao-icone" aria-label="Excluir @r.Descricao" @onclick="() => { _excluindo = r.Id; _editando = null; }">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12" /></svg>
+                            </button>
+                        </div>
+                    }
+                </li>
+            }
+        </ul>
+    </section>
+}
+
+@code {
+    private sealed class Edicao
+    {
+        public Guid? Id { get; init; }
+        public bool Receita { get; set; }
+        public string Descricao { get; set; } = "";
+        public string Valor { get; set; } = "";
+        public int Dia { get; set; } = EventosFavoa.Hoje.Day;
+        public string Categoria { get; set; } = "";
+        public string Conta { get; set; } = "";
+        public DateOnly Inicio { get; set; } = EventosFavoa.Hoje;
+        public bool CategoriaNaMao { get; set; }
+        public string? Erro { get; set; }
+    }
+
+    private QuadroCadastros? _quadro;
+    private Edicao? _editando;
+    private Guid? _excluindo;
+
+    private IEnumerable<string> CategoriasDo(bool receita) =>
+        _quadro?.Categorias.Where(c => c.Tipo == (receita ? TipoLancamento.Receita : TipoLancamento.Despesa)).Select(c => c.Nome) ?? [];
+
+    protected override async Task OnInitializedAsync() => await Recarregar();
+    private async Task Recarregar() => _quadro = await Cadastros.ObterAsync(EventosFavoa.Hoje);
+
+    private void Novo()
+    {
+        _excluindo = null;
+        _editando = new Edicao { Conta = _quadro?.Contas.FirstOrDefault(c => c.Ativa)?.Nome ?? "" };
+    }
+
+    private void Editar(RecorrenciaCadastro r)
+    {
+        _excluindo = null;
+        _editando = new Edicao
+        {
+            Id = r.Id, Receita = r.Tipo == TipoLancamento.Receita, Descricao = r.Descricao, Valor = Dinheiro.ParaCampo(r.ValorCentavos),
+            Dia = r.DiaDoMes, Categoria = r.Categoria, Conta = r.Conta, CategoriaNaMao = true,
+        };
+    }
+
+    private void Cancelar() { _editando = null; _excluindo = null; }
+
+    private void AoDescrever(Edicao e, string texto)
+    {
+        e.Descricao = texto;
+        if (e.CategoriaNaMao) return;
+        var sugerida = InterpretadorFrase.SugerirCategoria(texto, e.Receita);
+        e.Categoria = CategoriasDo(e.Receita).FirstOrDefault(c => Texto.Normalizar(c) == Texto.Normalizar(sugerida)) ?? "";
+    }
+
+    private void AoMudarDia(Edicao e, int dia)
+    {
+        e.Dia = Math.Clamp(dia, 1, 31);
+        if (e.Id is null) e.Inicio = CalendarioRecorrencia.PrimeiraAPartirDeHoje(e.Dia, EventosFavoa.Hoje);
+    }
+
+    private async Task Salvar()
+    {
+        if (_editando is not { } e) return;
+        if (Texto.LerMoeda(e.Valor) is not { } valor) { e.Erro = "Digite o valor, por exemplo 1.800,00."; return; }
+        var r = await Cadastros.SalvarRecorrenciaAsync(new DadosRecorrencia(e.Id, e.Receita ? TipoLancamento.Receita : TipoLancamento.Despesa,
+            e.Descricao, valor, e.Categoria, e.Conta, e.Dia, e.Inicio), EventosFavoa.Hoje);
+        if (!r.Sucesso) { e.Erro = r.Mensagem; return; }
+        Eventos.MostrarMensagem(r.Mensagem);
+        _editando = null;
+        await Recarregar();
+        await Eventos.NotificarRegistroSalvoAsync();
+    }
+
+    private async Task Ativar(RecorrenciaCadastro r, bool ativa)
+    {
+        var res = await Cadastros.DefinirRecorrenciaAtivaAsync(r.Id, ativa, EventosFavoa.Hoje);
+        Eventos.MostrarMensagem(res.Mensagem);
+        if (res.Sucesso) await Recarregar();
+    }
+
+    private async Task Excluir(RecorrenciaCadastro r)
+    {
+        var res = await Cadastros.ExcluirRecorrenciaAsync(r.Id);
+        Eventos.MostrarMensagem(res.Mensagem);
+        _excluindo = null;
+        await Recarregar();
+    }
+
+    private RenderFragment Formulario(Edicao e) => @<form class="cadastro__form" @onsubmit="Salvar" @onsubmit:preventDefault>
+        <div class="segmento" role="radiogroup" aria-label="Tipo">
+            <button type="button" role="radio" aria-checked="@(!e.Receita)" class="segmento__opcao @(!e.Receita ? "segmento__opcao--ativa" : "")"
+                    @onclick="() => { e.Receita = false; e.CategoriaNaMao = false; AoDescrever(e, e.Descricao); }">Despesa</button>
+            <button type="button" role="radio" aria-checked="@e.Receita" class="segmento__opcao @(e.Receita ? "segmento__opcao--ativa" : "")"
+                    @onclick="() => { e.Receita = true; e.CategoriaNaMao = false; AoDescrever(e, e.Descricao); }">Receita</button>
+        </div>
+        <div class="campo-linha">
+            <div class="campo">
+                <label for="rec-desc">Nome (opcional)</label>
+                <input id="rec-desc" type="text" autocomplete="off" placeholder="@(string.IsNullOrEmpty(e.Categoria) ? (e.Receita ? "Ex.: Salário" : "Ex.: Aluguel") : e.Categoria)"
+                       value="@e.Descricao" @oninput="a => AoDescrever(e, a.Value?.ToString() ?? string.Empty)" />
+            </div>
+            <div class="campo cadastro__campo-curto">
+                <label for="rec-valor">Valor (R$)</label>
+                <input id="rec-valor" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00" @bind="e.Valor" @bind:event="oninput" />
+            </div>
+        </div>
+        <div class="campo-linha">
+            <div class="campo cadastro__campo-dia">
+                <label for="rec-dia">Todo dia</label>
+                <input id="rec-dia" type="number" min="1" max="31" inputmode="numeric" value="@e.Dia"
+                       @onchange="a => AoMudarDia(e, int.TryParse(a.Value?.ToString(), out var d) ? d : e.Dia)" />
+            </div>
+            @if (e.Id is null)
+            {
+                <div class="campo cadastro__campo-curto">
+                    <label for="rec-inicio">Primeira vez em</label>
+                    <input id="rec-inicio" type="date" @bind="e.Inicio" />
+                </div>
+            }
+            <div class="campo">
+                <label for="rec-cat">Categoria</label>
+                <select id="rec-cat" class="seletor" value="@e.Categoria"
+                        @onchange="a => { e.Categoria = a.Value?.ToString() ?? string.Empty; e.CategoriaNaMao = true; }">
+                    <option value="">Escolha…</option>
+                    @foreach (var c in CategoriasDo(e.Receita).OrderBy(c => c, StringComparer.CurrentCultureIgnoreCase)) { <option value="@c">@c</option> }
+                </select>
+            </div>
+            <div class="campo cadastro__campo-curto">
+                <label for="rec-conta">Conta</label>
+                <select id="rec-conta" class="seletor" @bind="e.Conta">
+                    @foreach (var c in _quadro!.Contas.Where(c => c.Ativa || c.Nome == e.Conta)) { <option value="@c.Nome">@c.Nome</option> }
+                </select>
+            </div>
+        </div>
+        @if (e.Dia > 28) { <p class="cadastro__dica">Em meses sem dia @e.Dia, lança no último dia do mês.</p> }
+        @if (e.Erro is not null) { <p class="cadastro__erro" role="alert">@e.Erro</p> }
+        <div class="cadastro__acoes">
+            <button type="submit" class="botao botao--primario botao--pequeno">Salvar</button>
+            <button type="button" class="botao botao--fantasma botao--pequeno" @onclick="Cancelar">Cancelar</button>
+        </div>
+    </form>;
+}

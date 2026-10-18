@@ -1,0 +1,88 @@
+@using System.Globalization
+@* Gráfico de linha simples em SVG: evolução de carga, peso... Sem biblioteca, funciona offline. *@
+
+@if (Pontos.Count == 0)
+{
+    <p class="vazio">@Vazio</p>
+}
+else
+{
+    <figure class="grafico" aria-label="@Rotulo">
+        <svg viewBox="0 0 @Largura @Altura" role="img" aria-label="@Descricao">
+            @foreach (var y in Grade)
+            {
+                <line x1="@F(MargemX)" x2="@F(Largura - MargemX)" y1="@F(Y(y))" y2="@F(Y(y))" class="grafico__grade" />
+            }
+            @if (Pontos.Count > 1)
+            {
+                <polygon points="@Area" class="grafico__area" />
+                <polyline points="@Linha" class="grafico__linha" />
+            }
+            @for (var i = 0; i < Pontos.Count; i++)
+            {
+                var p = Pontos[i];
+                var ultimo = i == Pontos.Count - 1;
+                <circle cx="@F(X(i))" cy="@F(Y(p.Valor))" r="@(ultimo ? 5 : 3.5)" class="grafico__ponto @(ultimo ? "grafico__ponto--ultimo" : "")">
+                    <title>@p.Data.ToString("dd/MM/yyyy"): @Formatar(p.Valor)</title>
+                </circle>
+            }
+        </svg>
+        <figcaption class="grafico__legenda">
+            <span>@Pontos[0].Data.ToString("dd/MM")</span>
+            <span>mín. @Formatar(Pontos.Min(p => p.Valor)) · máx. @Formatar(Pontos.Max(p => p.Valor))</span>
+            <span>@Pontos[^1].Data.ToString("dd/MM")</span>
+        </figcaption>
+    </figure>
+}
+
+@code {
+    public sealed record Ponto(DateOnly Data, decimal Valor);
+
+    [Parameter, EditorRequired] public IReadOnlyList<Ponto> Pontos { get; set; } = [];
+    [Parameter] public string Unidade { get; set; } = "";
+    [Parameter] public string Rotulo { get; set; } = "Gráfico";
+    [Parameter] public string Vazio { get; set; } = "Ainda sem dados.";
+
+    private const double Largura = 600, Altura = 180, MargemX = 10, MargemY = 16;
+    private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
+    private static readonly CultureInfo PtBr = new("pt-BR");
+
+    private decimal Min => Pontos.Min(p => p.Valor);
+    private decimal Max => Pontos.Max(p => p.Valor);
+
+    // Uma folga de 10% em cima e embaixo para a linha não encostar nas bordas.
+    private (decimal Baixo, decimal Alto) Faixa
+    {
+        get
+        {
+            var folga = Math.Max((Max - Min) * 0.1m, Max == 0 ? 1 : Max * 0.02m);
+            return (Min - folga, Max + folga);
+        }
+    }
+
+    private IEnumerable<decimal> Grade => [Faixa.Baixo + (Faixa.Alto - Faixa.Baixo) / 4, (Faixa.Baixo + Faixa.Alto) / 2, Faixa.Alto - (Faixa.Alto - Faixa.Baixo) / 4];
+
+    // Eixo X pelo tempo (não pelo índice): treinos espaçados aparecem espaçados.
+    private double X(int i)
+    {
+        if (Pontos.Count == 1) return Largura / 2;
+        var inicio = Pontos[0].Data.DayNumber;
+        var total = Math.Max(1, Pontos[^1].Data.DayNumber - inicio);
+        return MargemX + (Largura - 2 * MargemX) * (Pontos[i].Data.DayNumber - inicio) / total;
+    }
+
+    private double Y(decimal v)
+    {
+        var (baixo, alto) = Faixa;
+        return MargemY + (Altura - 2 * MargemY) * (double)((alto - v) / (alto - baixo));
+    }
+
+    private string Linha => string.Join(' ', Pontos.Select((p, i) => $"{F(X(i))},{F(Y(p.Valor))}"));
+    private string Area => $"{F(X(0))},{F(Altura)} {Linha} {F(X(Pontos.Count - 1))},{F(Altura)}";
+
+    private string Descricao => $"{Rotulo}: de {Formatar(Pontos[0].Valor)} em {Pontos[0].Data:dd/MM} para {Formatar(Pontos[^1].Valor)} em {Pontos[^1].Data:dd/MM}";
+
+    private string Formatar(decimal v) => $"{v.ToString("0.#", PtBr)}{(Unidade.Length > 0 ? " " + Unidade : "")}";
+
+    private static string F(double v) => v.ToString("0.#", Inv);
+}

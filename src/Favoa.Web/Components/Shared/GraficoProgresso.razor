@@ -1,0 +1,125 @@
+@using System.Globalization
+@* Progresso diário (0–100%) de uma área da colmeia. Dias sem registro quebram a linha.
+   Passar o mouse (ou tocar) num dia mostra a linha-guia e o valor; a tabela logo abaixo traz todos os números. *@
+
+<figure class="gp" aria-label="@Titulo">
+    <div class="gp__plano" role="img" aria-label="@Descricao">
+        @foreach (var v in Marcas)
+        {
+            <span class="gp__y" style="top:@F(100 - v)%">@v%</span>
+        }
+        <svg viewBox="0 0 1000 100" preserveAspectRatio="none" aria-hidden="true">
+            @foreach (var v in Marcas)
+            {
+                <line x1="0" x2="1000" y1="@F(100 - v)" y2="@F(100 - v)" class="gp__grade" vector-effect="non-scaling-stroke" />
+            }
+            @foreach (var trecho in Trechos.Where(t => t.Count > 1))
+            {
+                <polyline points="@string.Join(' ', trecho.Select(Ponto))" class="gp__linha" vector-effect="non-scaling-stroke" />
+            }
+        </svg>
+        @foreach (var trecho in Trechos.Where(t => t.Count == 1))
+        {
+            <span class="gp__ponto" style="left:@F(Xp(trecho[0]))%; top:@F(Yp(trecho[0]))%"></span>
+        }
+        @if (Ultimo is int u)
+        {
+            <span class="gp__ponto gp__ponto--ultimo" style="left:@F(Xp(u))%; top:@F(Yp(u))%"></span>
+            <span class="gp__rotulo" style="top:@F(Yp(u))%">@Pct(Valor(u)!.Value)</span>
+        }
+
+        @* Camada de leitura: uma faixa por dia (maior que a marca) com linha-guia, ponto e valor. *@
+        @for (var i = 0; i < Dias.Count; i++)
+        {
+            var v = Valor(i);
+            if (v is null) continue;
+            var x = Xp(i);
+            var lado = x < 15 ? "gp__col--esq" : x > 85 ? "gp__col--dir" : "";
+            <span class="gp__col @lado" style="left:@F(x - LarguraCol / 2)%; width:@F(LarguraCol)%">
+                <span class="gp__guia"></span>
+                <span class="gp__marca" style="top:@F(Yp(i))%"></span>
+                <span class="gp__dica"><strong>@Pct(v.Value)</strong> @Dias[i]!.Data.ToString("ddd dd/MM", PtBr)</span>
+            </span>
+        }
+    </div>
+    <div class="gp__x" aria-hidden="true">
+        @foreach (var (_, rotulo) in RotulosX)
+        {
+            <span>@rotulo</span>
+        }
+    </div>
+
+    <details class="gp__tabela">
+        <summary>Ver em tabela</summary>
+        <table>
+            <thead><tr><th scope="col">Dia</th><th scope="col">@Titulo</th></tr></thead>
+            <tbody>
+                @for (var i = Dias.Count - 1; i >= 0; i--)
+                {
+                    if (Dias[i] is not { } d) continue;
+                    <tr><td>@d.Data.ToString("ddd dd/MM", PtBr)</td><td>@(Valor(i) is { } v ? Pct(v) : "—")</td></tr>
+                }
+            </tbody>
+        </table>
+    </details>
+</figure>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<ProgressoDia?> Dias { get; set; } = [];
+    [Parameter] public string Area { get; set; } = CelulaColmeia.Hoje;
+    [Parameter] public string Titulo { get; set; } = "Colmeia";
+
+    private static readonly int[] Marcas = [0, 50, 100];
+    private double LarguraCol => Dias.Count <= 1 ? 100 : 100.0 / (Dias.Count - 1);
+    private double Xp(int i) => Dias.Count <= 1 ? 50 : 100.0 * i / (Dias.Count - 1);
+    private double Yp(int i) => 100 * (1 - Math.Clamp(Valor(i) ?? 0, 0, 1));
+    private string Ponto(int i) => $"{F(Xp(i) * 10)},{F(Yp(i))}";
+    private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
+    private static readonly CultureInfo PtBr = new("pt-BR");
+
+    private double? Valor(int i) => Dias[i]?.Area(Area);
+    private static string F(double v) => v.ToString("0.#", Inv);
+    private static string Pct(double v) => $"{Math.Round(v * 100):0}%";
+
+    private int? Ultimo => Enumerable.Range(0, Dias.Count).Where(i => Valor(i) is not null).Select(i => (int?)i).LastOrDefault();
+
+    private IEnumerable<(int, string)> RotulosX
+    {
+        get
+        {
+            if (Dias.Count == 0) yield break;
+            yield return (0, Data(0));
+            if (Dias.Count > 2) yield return (Dias.Count / 2, Data(Dias.Count / 2));
+            yield return (Dias.Count - 1, Data(Dias.Count - 1));
+        }
+    }
+
+    [Parameter, EditorRequired] public DateOnly Inicio { get; set; }
+    private string Data(int i) => Inicio.AddDays(i).ToString("dd/MM", PtBr);
+
+    private List<List<int>> Trechos
+    {
+        get
+        {
+            var trechos = new List<List<int>>();
+            List<int>? atual = null;
+            for (var i = 0; i < Dias.Count; i++)
+            {
+                if (Valor(i) is null) { atual = null; continue; }
+                if (atual is null) trechos.Add(atual = []);
+                atual.Add(i);
+            }
+            return trechos;
+        }
+    }
+
+    private string Descricao
+    {
+        get
+        {
+            var valores = Enumerable.Range(0, Dias.Count).Select(Valor).Where(v => v is not null).Select(v => v!.Value).ToList();
+            if (valores.Count == 0) return $"{Titulo}: sem registros no período.";
+            return $"{Titulo} nos últimos {Dias.Count} dias: média {Pct(valores.Average())}, último {Pct(valores[^1])}.";
+        }
+    }
+}

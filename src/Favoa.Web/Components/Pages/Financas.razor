@@ -1,0 +1,461 @@
+@page "/financas"
+@using System.Globalization
+@using Favoa.Core.Edicao
+@using Favoa.Core.Financas
+@implements IDisposable
+@inject IFavoaServico Servico
+@inject EventosFavoa Eventos
+@inject NavigationManager Nav
+@inject Favoa.Core.Acesso.IAcessoServico Acesso
+@inject Favoa.Core.Pessoas.IPessoaAtual PessoaAtual
+
+<PageTitle>Finanças · Fávoa</PageTitle>
+
+<main class="financas">
+    <header class="pagina__topo">
+        <div class="pagina__titulo">
+            <h1>Finanças</h1>
+            <nav class="mes" aria-label="Mês">
+                <a class="botao-icone" href="@UrlMes(-1)" aria-label="Mês anterior">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6" /></svg>
+                </a>
+                <span class="mes__nome" aria-live="polite">@NomeMes</span>
+                <a class="botao-icone" href="@UrlMes(1)" aria-label="Próximo mês">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+                </a>
+                @if (!EhMesAtual)
+                {
+                    <a class="botao botao--fantasma botao--pequeno" href="@Url(mes: null)">Mês atual</a>
+                }
+            </nav>
+        </div>
+        <div class="pagina__acoes">
+        <a class="botao botao--fantasma" href="cadastros?aba=recorrentes">Recorrentes</a>
+        <button type="button" class="botao botao--primario so-celular-flex" @onclick='() => Eventos.SolicitarLancamento("despesa")'>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+            Lançar
+        </button>
+        <button type="button" class="botao botao--primario so-pc-flex" aria-expanded="@_formAberto" @onclick="() => _formAberto = !_formAberto">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+            Lançar
+        </button>
+        </div>
+    </header>
+
+    @if (_extrato is null)
+    {
+        <p class="carregando">Carregando o mês…</p>
+    }
+    else
+    {
+        var e = _extrato;
+
+        <section class="resumo" aria-label="Resumo do mês">
+            <div class="cartao resumo__item">
+                <div class="rotulo">Receitas</div>
+                <div class="resumo__valor resumo__valor--receita">@Moeda(e.ReceitasCentavos)</div>
+            </div>
+            <div class="cartao resumo__item">
+                <div class="rotulo">Despesas</div>
+                <div class="resumo__valor">@Moeda(e.DespesasCentavos)</div>
+                @if (!e.Filtro.TemFiltro && ComparacaoAnterior(e) is { } comparacao)
+                {
+                    <div class="resumo__detalhe">@comparacao</div>
+                }
+            </div>
+            <div class="cartao resumo__item">
+                <div class="rotulo">Saldo</div>
+                <div class="resumo__valor @(e.SaldoCentavos < 0 ? "resumo__valor--negativo" : "")">@MoedaComSinal(e.SaldoCentavos)</div>
+                @if (e.Filtro.TemFiltro)
+                {
+                    <div class="resumo__detalhe">só o que está filtrado</div>
+                }
+            </div>
+
+            <div class="cartao resumo__item resumo__orcamento">
+                <div class="rotulo">Orçamento do mês</div>
+                @if (e.Ritmo is { } r)
+                {
+                    <div class="orcamento__linha">
+                        <span class="resumo__valor">@Moeda(r.GastoCentavos)</span>
+                        <span class="orcamento__de">de @Moeda(r.OrcamentoCentavos)</span>
+                    </div>
+                    <div class="barra @ClasseSituacao(r.Situacao)" role="img"
+                         aria-label="@($"{Porcento(r.FracaoGasta)} do orçamento usado; o esperado até hoje era {Porcento(r.FracaoEsperada)}")">
+                        <div class="barra__mel" style="width:@Largura(r.FracaoGasta)"></div>
+                        @if (r.DiasRestantes > 0 && r.FracaoEsperada > 0)
+                        {
+                            <div class="barra__marca" style="left:@Largura(r.FracaoEsperada)" title="Esperado até hoje"></div>
+                        }
+                    </div>
+                    <div class="resumo__detalhe @(r.Situacao is SituacaoOrcamento.Estourado or SituacaoOrcamento.Acelerado ? "resumo__detalhe--alerta" : "")">@TextoRitmo(r)</div>
+                }
+                else
+                {
+                    <p class="vazio">Sem orçamento para o mês. Defina um valor para ver o ritmo dos gastos.</p>
+                    <div class="orcamento__definir">
+                        <label class="mini mini--largo"><span>Orçamento do mês (R$)</span>
+                            <input type="text" inputmode="decimal" placeholder="3000" autocomplete="off" @bind="_orcamentoNovo" @bind:event="oninput" @onkeydown="AoTeclarOrcamento" />
+                        </label>
+                        <button type="button" class="botao botao--primario" disabled="@string.IsNullOrWhiteSpace(_orcamentoNovo)" @onclick="DefinirOrcamento">Definir</button>
+                    </div>
+                    @if (_orcamentoErro is not null) { <p class="captura__aviso">@_orcamentoErro</p> }
+                }
+            </div>
+        </section>
+
+        @if (_formAberto)
+        {
+            <NovoLancamento AoFechar="() => _formAberto = false" />
+        }
+
+        <div class="financas__corpo">
+            <section class="extrato" aria-label="Lançamentos">
+                @{
+                    var totalLanc = e.Dias.Sum(d => d.Lancamentos.Count);
+                    var aberto = _extratoAberto || e.Filtro.TemFiltro || _busca.Length > 0;
+                }
+                <button type="button" class="extrato__cabeca" aria-expanded="@aberto" aria-controls="extrato-conteudo" @onclick="() => _extratoAberto = !_extratoAberto">
+                    <span class="extrato__titulo">Histórico de lançamentos</span>
+                    <span class="dados__meta">@(totalLanc == 1 ? "1 lançamento" : $"{totalLanc} lançamentos")</span>
+                    <svg class="extrato__seta @(aberto ? "extrato__seta--aberta" : "")" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
+                </button>
+                @if (aberto)
+                {
+                <div id="extrato-conteudo" class="extrato__conteudo">
+                <div class="filtros">
+                    <div class="filtros__avancados @(_filtrosAbertos ? "filtros__avancados--aberto" : "")">
+                    <div class="segmento" role="radiogroup" aria-label="Tipo">
+                            @foreach (var (rotulo, tipo) in Tipos)
+                            {
+                                <button type="button" role="radio" aria-checked="@(e.Filtro.Tipo == tipo)"
+                                        class="segmento__opcao @(e.Filtro.Tipo == tipo ? "segmento__opcao--ativa" : "")"
+                                        @onclick="() => Ir(tipo: tipo, mudarTipo: true)">@rotulo</button>
+                            }
+                        </div>
+
+                        @if (_pessoas.Count > 1)
+                        {
+                            <div class="segmento" role="radiogroup" aria-label="Quem lançou">
+                                <button type="button" role="radio" aria-checked="@(e.Filtro.PessoaId is null)"
+                                        class="segmento__opcao @(e.Filtro.PessoaId is null ? "segmento__opcao--ativa" : "")"
+                                        @onclick="() => Ir(pessoa: null, mudarPessoa: true)">Casa</button>
+                                @foreach (var p in _pessoas)
+                                {
+                                    var ativa = e.Filtro.PessoaId == p.Id;
+                                    <button type="button" role="radio" aria-checked="@ativa"
+                                            class="segmento__opcao @(ativa ? "segmento__opcao--ativa" : "")"
+                                            @onclick="() => Ir(pessoa: p.Id, mudarPessoa: true)">@p.Nome</button>
+                                }
+                            </div>
+                        }
+
+                        <label class="so-leitor" for="filtro-conta">Conta</label>
+                        <select id="filtro-conta" class="seletor" value="@(e.Filtro.ContaId?.ToString() ?? "")" @onchange="AoTrocarConta">
+                            <option value="">Todas as contas</option>
+                            @foreach (var c in e.Contas)
+                            {
+                                <option value="@c.Id">@c.Nome</option>
+                            }
+                        </select>
+
+                    </div>
+                    <button type="button" class="botao botao--fantasma so-celular-flex filtros__alternar" aria-expanded="@_filtrosAbertos" @onclick="() => _filtrosAbertos = !_filtrosAbertos">
+                        Filtros@(FiltrosAtivos > 0 ? $" ({FiltrosAtivos})" : "")
+                    </button>
+                    <div class="busca">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
+                        <label class="so-leitor" for="filtro-busca">Buscar</label>
+                        <input id="filtro-busca" type="search" placeholder="Buscar" autocomplete="off"
+                               value="@_busca" @oninput="AoBuscar" />
+                    </div>
+                </div>
+
+                @if (e.Filtro.CategoriaId is { } catId)
+                {
+                    <div class="filtro-ativo">
+                        <span>Categoria: <strong>@(e.Categorias.FirstOrDefault(c => c.Id == catId)?.Nome ?? "—")</strong></span>
+                        <button type="button" class="botao botao--fantasma botao--pequeno" @onclick="() => Ir(categoria: null, mudarCategoria: true)">Limpar</button>
+                    </div>
+                }
+
+                @if (e.Dias.Count == 0)
+                {
+                    <div class="cartao extrato__vazio">
+                        @if (e.Filtro.TemFiltro)
+                        {
+                            <p class="vazio">Nada com esses filtros em @NomeMes.ToLowerInvariant().</p>
+                            <button type="button" class="botao botao--fantasma" @onclick="LimparFiltros">Limpar filtros</button>
+                        }
+                        else
+                        {
+                            <p class="vazio">Nenhum lançamento em @NomeMes.ToLowerInvariant(). Use <strong>Lançar</strong> ou, em <AtalhoCaptura />, escreva só o que foi e o valor: <em>uber 23</em></p>
+                        }
+                    </div>
+                }
+
+                @foreach (var dia in e.Dias)
+                {
+                    <div class="dia">
+                        <h2 class="dia__topo">
+                            <span>@NomeDia(dia.Data)</span>
+                            <span class="dia__saldo">@MoedaComSinal(dia.SaldoCentavos)</span>
+                        </h2>
+                        <ul class="dia__lista">
+                            @foreach (var l in dia.Lancamentos)
+                            {
+                                <li>
+                                    <button type="button" class="lancamento"
+                                            aria-label="@($"Editar {l.Categoria}, {MoedaComSinal(l.ValorComSinal)}")"
+                                            @onclick="() => Eventos.SolicitarEdicao(new(TipoReferencia.Lancamento, l.Id))">
+                                        <span class="lancamento__icone @(l.Tipo == TipoLancamento.Receita ? "lancamento__icone--receita" : "")" aria-hidden="true">@Inicial(l.Categoria)</span>
+                                        <span class="lancamento__texto">
+                                            <span class="lancamento__titulo">@l.Categoria@if (VariosAutores(e) && _pessoas.Count > 1 && _pessoas.FirstOrDefault(p => p.Id == l.PessoaId) is { } quem)
+                                            {
+                                                <span class="avatar avatar--mini lancamento__quem" style="--cor-pessoa:@quem.Cor" title="Lançado por @quem.Nome" aria-label="lançado por @quem.Nome">@quem.Inicial</span>
+                                            }</span>
+                                            <span class="lancamento__sub">@Subtitulo(l)</span>
+                                        </span>
+                                        <span class="lancamento__valor @(l.Tipo == TipoLancamento.Receita ? "lancamento__valor--receita" : "")">@MoedaComSinal(l.ValorComSinal)</span>
+                                    </button>
+                                </li>
+                            }
+                        </ul>
+                    </div>
+                }
+                </div>
+                }
+            </section>
+
+            <aside class="cartao categorias" aria-labelledby="titulo-categorias">
+                <div class="categorias__topo">
+                    <h2 id="titulo-categorias" class="rotulo">Para onde foi</h2>
+                    <a class="categorias__limites" href="cadastros">Limites</a>
+                </div>
+                @if (e.DespesasPorCategoria.Count == 0)
+                {
+                    <p class="vazio">Sem despesas @(e.Filtro.TemFiltro ? "com esses filtros" : "neste mês").</p>
+                }
+                @foreach (var fatia in e.DespesasPorCategoria)
+                {
+                    var ativa = e.Filtro.CategoriaId == fatia.CategoriaId;
+                    <button type="button" class="fatia @(ativa ? "fatia--ativa" : "")" aria-pressed="@ativa"
+                            @onclick="() => Ir(categoria: ativa ? null : fatia.CategoriaId, mudarCategoria: true)">
+                        <span class="fatia__linha">
+                            <span class="fatia__nome">@fatia.Nome</span>
+                            <span class="fatia__valor">@Moeda(fatia.Centavos)@(fatia.OrcamentoCentavos is { } lim ? $" de {Moeda(lim)}" : "")</span>
+                        </span>
+                        @if (fatia.FracaoOrcamento is { } fo)
+                        {
+                            <span class="fatia__barra @(fo > 1 ? "fatia__barra--estourada" : fo >= 0.8 ? "fatia__barra--alerta" : "")" aria-hidden="true"><span style="width:@Largura(fo)"></span></span>
+                            <span class="fatia__porcento @(fo > 1 ? "fatia__porcento--alerta" : "")">@TextoLimite(fatia)</span>
+                        }
+                        else
+                        {
+                            <span class="fatia__barra" aria-hidden="true"><span style="width:@Largura(fatia.Fracao)"></span></span>
+                            <span class="fatia__porcento">@Porcento(fatia.Fracao) das despesas</span>
+                        }
+                    </button>
+                }
+            </aside>
+        </div>
+    }
+</main>
+
+@code {
+    [SupplyParameterFromQuery(Name = "mes")] public string? MesQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "tipo")] public string? TipoQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "categoria")] public Guid? CategoriaQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "conta")] public Guid? ContaQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "pessoa")] public Guid? PessoaQuery { get; set; }
+    private IReadOnlyList<Favoa.Core.Pessoas.PessoaInfo> _pessoas = [];
+
+    private static readonly CultureInfo PtBr = new("pt-BR");
+    private static readonly (string Rotulo, TipoLancamento? Tipo)[] Tipos =
+        [("Tudo", null), ("Despesas", TipoLancamento.Despesa), ("Receitas", TipoLancamento.Receita)];
+
+    private ExtratoMes? _extrato;
+    [SupplyParameterFromQuery(Name = "novo")] public bool Novo { get; set; }
+    private bool _formAberto;
+    private FiltroExtrato _filtro = FiltroExtrato.DoMes(EventosFavoa.Hoje);
+    private string _busca = "";
+    private bool _filtrosAbertos;
+    private bool _extratoAberto;
+    private string _orcamentoNovo = "";
+    private string? _orcamentoErro;
+
+    private async Task AoTeclarOrcamento(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await DefinirOrcamento();
+    }
+
+    private async Task DefinirOrcamento()
+    {
+        var v = Favoa.Core.Captura.Texto.LerMoeda(_orcamentoNovo);
+        if (v is not > 0) { _orcamentoErro = "Digite um valor, por exemplo 3000 ou 3000,00."; return; }
+        _orcamentoErro = null;
+        var r = await Servico.RegistrarAsync(new Favoa.Core.Captura.Interpretacao(Favoa.Core.Captura.TipoCaptura.Orcamento, $"orçamento {_orcamentoNovo}") { ValorCentavos = v });
+        Eventos.MostrarMensagem(r.Mensagem, r.Sucesso ? r.Criado : null);
+        _orcamentoNovo = "";
+        await Eventos.NotificarRegistroSalvoAsync();
+    }
+    private int FiltrosAtivos => (_filtro.Tipo is not null ? 1 : 0) + (_filtro.PessoaId is not null ? 1 : 0) + (_filtro.ContaId is not null ? 1 : 0);
+    private int _versaoBusca;
+
+    protected override void OnInitialized()
+    {
+        Eventos.RegistroSalvo += Recarregar;
+        _formAberto = Novo;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _filtro = new FiltroExtrato(
+            LerMes().Year, LerMes().Month,
+            TipoQuery switch { "despesa" => TipoLancamento.Despesa, "receita" => TipoLancamento.Receita, _ => null },
+            CategoriaQuery,
+            ContaQuery,
+            _busca,
+            PessoaQuery);
+        if (_pessoas.Count == 0) _pessoas = (await Acesso.ObterEstadoAsync(PessoaAtual.FamiliaId)).Pessoas;
+        await Recarregar();
+    }
+
+    private DateOnly LerMes() =>
+        DateOnly.TryParseExact($"{MesQuery}-01", "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var d)
+            ? d
+            : new DateOnly(EventosFavoa.Hoje.Year, EventosFavoa.Hoje.Month, 1);
+
+    private async Task Recarregar()
+    {
+        _extrato = await Servico.ObterExtratoAsync(_filtro, EventosFavoa.Hoje);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    // ---------- Navegação: mês e filtros ficam na URL, para voltar e favoritar ----------
+
+    private bool EhMesAtual => _filtro.Ano == EventosFavoa.Hoje.Year && _filtro.Mes == EventosFavoa.Hoje.Month;
+
+    private string NomeMes
+    {
+        get
+        {
+            var texto = _filtro.Inicio.ToString("MMMM 'de' yyyy", PtBr);
+            return char.ToUpper(texto[0]) + texto[1..];
+        }
+    }
+
+    private string UrlMes(int deslocamento) => Url(mes: _filtro.Inicio.AddMonths(deslocamento));
+
+    private string Url(DateOnly? mes) => Nav.GetUriWithQueryParameters(new Dictionary<string, object?>
+    {
+        ["mes"] = mes is { } m && !(m.Year == EventosFavoa.Hoje.Year && m.Month == EventosFavoa.Hoje.Month)
+            ? m.ToString("yyyy-MM", CultureInfo.InvariantCulture)
+            : null,
+    });
+
+    private void Ir(TipoLancamento? tipo = null, bool mudarTipo = false, Guid? categoria = null, bool mudarCategoria = false,
+                    Guid? conta = null, bool mudarConta = false, Guid? pessoa = null, bool mudarPessoa = false)
+    {
+        var parametros = new Dictionary<string, object?>();
+        if (mudarPessoa) parametros["pessoa"] = pessoa;
+        if (mudarTipo) parametros["tipo"] = tipo switch { TipoLancamento.Despesa => "despesa", TipoLancamento.Receita => "receita", _ => null };
+        if (mudarCategoria) parametros["categoria"] = categoria;
+        if (mudarConta) parametros["conta"] = conta;
+        Nav.NavigateTo(Nav.GetUriWithQueryParameters(parametros));
+    }
+
+    private void AoTrocarConta(ChangeEventArgs a) =>
+        Ir(conta: Guid.TryParse(a.Value?.ToString(), out var id) ? id : null, mudarConta: true);
+
+    private async Task AoBuscar(ChangeEventArgs a)
+    {
+        _busca = a.Value?.ToString() ?? "";
+        var versao = ++_versaoBusca;
+        await Task.Delay(180); // espera a pessoa parar de digitar
+        if (versao != _versaoBusca) return;
+        _filtro = _filtro with { Busca = _busca };
+        await Recarregar();
+    }
+
+    private void LimparFiltros()
+    {
+        _busca = "";
+        _filtro = _filtro with { Busca = "" };
+        Nav.NavigateTo(Nav.GetUriWithQueryParameters(new Dictionary<string, object?>
+        {
+            ["tipo"] = null, ["categoria"] = null, ["conta"] = null, ["pessoa"] = null,
+        }));
+        _ = Recarregar();
+    }
+
+    // ---------- Formatação ----------
+
+    private static bool VariosAutores(Favoa.Core.Financas.ExtratoMes e) => e.Dias.SelectMany(d => d.Lancamentos).Select(x => x.PessoaId).Distinct().Count() > 1;
+
+    private static string Moeda(long centavos) => Texto.FormatarMoeda(centavos);
+
+    private static string MoedaComSinal(long centavos) =>
+        centavos switch { > 0 => $"+ {Moeda(centavos)}", < 0 => $"− {Moeda(-centavos)}", _ => Moeda(0) };
+
+    private static string Porcento(double fracao) => (fracao * 100).ToString("0", PtBr) + "%";
+
+    private static string TextoLimite(FatiaCategoria f)
+    {
+        var restante = f.OrcamentoCentavos!.Value - f.Centavos;
+        return restante < 0 ? $"passou {Moeda(-restante)} do limite" : $"{Porcento(f.FracaoOrcamento!.Value)} do limite · restam {Moeda(restante)}";
+    }
+
+    private static string Largura(double fracao) =>
+        (Math.Clamp(fracao, 0, 1) * 100).ToString("0.##", CultureInfo.InvariantCulture) + "%";
+
+    private static string Inicial(string nome) => string.IsNullOrWhiteSpace(nome) ? "·" : nome[..1].ToUpper(PtBr);
+
+    private static string Subtitulo(LinhaExtrato l) =>
+        string.IsNullOrWhiteSpace(l.Descricao) ? l.Conta : $"{l.Conta} · {l.Descricao}";
+
+    private static string NomeDia(DateOnly dia)
+    {
+        var hoje = EventosFavoa.Hoje;
+        if (dia == hoje) return "Hoje";
+        if (dia == hoje.AddDays(-1)) return "Ontem";
+        var texto = dia.ToString("dddd, d 'de' MMM", PtBr).Replace(".", "");
+        return char.ToUpper(texto[0]) + texto[1..];
+    }
+
+    private static string ClasseSituacao(SituacaoOrcamento s) => s switch
+    {
+        SituacaoOrcamento.Estourado => "barra--estourada",
+        SituacaoOrcamento.Acelerado => "barra--acelerada",
+        _ => "",
+    };
+
+    private static string TextoRitmo(RitmoOrcamento r)
+    {
+        if (r.Situacao == SituacaoOrcamento.Estourado)
+            return $"Passou {Moeda(-r.RestanteCentavos)} do orçamento.";
+        if (r.DiasRestantes == 0)
+            return $"Sobraram {Moeda(r.RestanteCentavos)}.";
+
+        var porDia = r.PorDiaCentavos is { } p ? $"Dá para gastar {Moeda(p)} por dia até o fim do mês" : "Restam " + Moeda(r.RestanteCentavos);
+        return r.Situacao switch
+        {
+            SituacaoOrcamento.Folga => $"{porDia}. Abaixo do esperado, ótimo.",
+            SituacaoOrcamento.Acelerado => $"{porDia}. Acima do esperado para hoje.",
+            _ => $"{porDia}.",
+        };
+    }
+
+    private static string? ComparacaoAnterior(ExtratoMes e)
+    {
+        var anterior = e.DespesasMesAnteriorCentavos;
+        if (anterior <= 0) return null;
+        var diferenca = (double)(e.DespesasCentavos - anterior) / anterior;
+        var hoje = EventosFavoa.Hoje;
+        var base_ = e.Filtro.Inicio <= hoje && hoje < e.Filtro.Fim ? "que o mês passado até hoje" : "que o mês anterior";
+        if (Math.Abs(diferenca) < 0.01) return "Igual ao mês anterior";
+        return $"{Porcento(Math.Abs(diferenca))} {(diferenca > 0 ? "a mais" : "a menos")} {base_}";
+    }
+
+    public void Dispose() => Eventos.RegistroSalvo -= Recarregar;
+}

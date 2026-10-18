@@ -1,0 +1,367 @@
+@page "/projetos/{Id:guid}"
+@using System.Globalization
+@using System.Text.RegularExpressions
+@implements IDisposable
+@inject IProjetosServico Servico
+@inject IFavoaServico Registros
+@inject EventosFavoa Eventos
+@inject NavigationManager Nav
+
+<PageTitle>@(_p?.Resumo.Nome ?? "Projeto") · Fávoa</PageTitle>
+
+<main class="modulo projeto">
+    <a class="projeto__voltar" href="projetos">‹ Projetos</a>
+
+    @if (_carregado && _p is null)
+    {
+        <p class="vazio">Esse projeto não existe mais (ou é pessoal de outra pessoa).</p>
+    }
+    else if (_p is { } p)
+    {
+        var r = p.Resumo;
+        <header class="projeto__topo">
+            <div class="projeto__titulo">
+                <div class="projeto-cartao__topo">
+                    <span class="chip">@TiposProjeto.Nome(r.Tipo)</span>
+                    <span class="chip">@(r.DaCasa ? "da casa" : "só você")</span>
+                </div>
+                <h1>@r.Nome</h1>
+                <p class="pagina__resumo"><span>@Periodo(r)</span></p>
+            </div>
+            <div class="projeto__acoes">
+                <label class="so-leitor" for="pj-situacao">Situação</label>
+                <select id="pj-situacao" class="seletor" value="@r.Situacao" @onchange="TrocarSituacao">
+                    @foreach (var s in Situacoes) { <option value="@s">@TiposProjeto.Nome(s)</option> }
+                </select>
+                <button type="button" class="botao botao--fantasma" @onclick="() => _editando = !_editando">Editar</button>
+            </div>
+        </header>
+
+        @if (_editando)
+        {
+            <FormProjeto Existente="p" AoFechar="() => _editando = false" AoSalvar="AoEditar" />
+        }
+
+        @if (!string.IsNullOrWhiteSpace(p.Descricao))
+        {
+            <p class="projeto__descricao">@p.Descricao</p>
+        }
+
+        <section class="projeto__numeros" aria-label="Resumo">
+            <div class="numero">
+                <span class="numero__valor">@r.Percentual%</span>
+                <span class="numero__rotulo">feito (@(r.TarefasFeitas + r.ChecklistFeitos) de @(r.TarefasTotal + r.ChecklistTotal))</span>
+            </div>
+            @if (r.DiasAte(Hoje) is { } dias && r.Situacao != SituacaoProjeto.Concluido)
+            {
+                <div class="numero">
+                    <span class="numero__valor">@dias</span>
+                    <span class="numero__rotulo">@(dias == 1 ? "dia" : "dias") até @(r.Inicio > Hoje ? (r.Tipo == TipoProjeto.Viagem ? "a ida" : "o início") : (r.Tipo == TipoProjeto.Trabalho ? "a entrega" : "o fim"))</span>
+                </div>
+            }
+            <div class="numero">
+                <span class="numero__valor">@Dinheiro(r.GastoCentavos)</span>
+                <span class="numero__rotulo">@(r.OrcamentoCentavos is { } o ? $"gasto de {Dinheiro(o)}" : "gasto")</span>
+            </div>
+            @if (r.RecebidoCentavos > 0 || r.Tipo == TipoProjeto.Trabalho)
+            {
+                <div class="numero">
+                    <span class="numero__valor">@Dinheiro(r.RecebidoCentavos)</span>
+                    <span class="numero__rotulo">recebido</span>
+                </div>
+            }
+        </section>
+        @if (r.OrcamentoCentavos is { } orc and > 0)
+        {
+            <div class="barra @(r.GastoCentavos > orc ? "barra--estourada" : "")" role="img" aria-label="@Math.Round(100.0 * r.GastoCentavos / orc)% do orçamento usado">
+                <div class="barra__mel" style="width:@Math.Min(100, Math.Round(100.0 * r.GastoCentavos / orc))%"></div>
+            </div>
+        }
+
+        <div class="projeto__colunas">
+            <div class="projeto__coluna">
+                <section class="cartao projeto__bloco" aria-labelledby="pj-tarefas">
+                    <h2 id="pj-tarefas" class="rotulo">Tarefas</h2>
+                    <div class="nova nova--compacta">
+                        <label class="so-leitor" for="pj-nova-tarefa">Nova tarefa</label>
+                        <input id="pj-nova-tarefa" type="text" autocomplete="off" placeholder="Nova tarefa" @bind="_novaTarefa" @bind:event="oninput" @onkeydown="TeclaTarefa" />
+                        <label class="so-leitor" for="pj-prazo">Prazo</label>
+                        <input id="pj-prazo" class="projeto__data" type="date" @bind="_prazoTarefa" />
+                        <button type="button" class="botao botao--primario" disabled="@string.IsNullOrWhiteSpace(_novaTarefa)" @onclick="CriarTarefa">Adicionar</button>
+                    </div>
+                    @if (p.Tarefas.Count == 0) { <p class="vazio">Nenhuma tarefa. Também dá pela frase: <em>tarefa comprar passagem #@Apelido(r.Nome)</em></p> }
+                    @foreach (var t in p.Tarefas)
+                    {
+                        <div class="tarefa">
+                            <label class="tarefa__marcar">
+                                <input type="checkbox" checked="@t.Feita" @onchange="() => AlternarTarefa(t.Id)" />
+                                <span class="tarefa__titulo @(t.Feita ? "tarefa__titulo--feita" : "")">@t.Titulo</span>
+                            </label>
+                            @if (t.Prazo is { } pz) { <span class="tarefa__prazo @(t.Atrasada ? "tarefa__prazo--atrasada" : "")">@pz.ToString("dd/MM")</span> }
+                            <button type="button" class="botao-icone botao-icone--discreto" aria-label="Editar tarefa @t.Titulo"
+                                    @onclick="() => Eventos.SolicitarEdicao(new(Favoa.Core.Edicao.TipoReferencia.Tarefa, t.Id))">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4z" /><path d="M14 6l4 4" /></svg>
+                            </button>
+                        </div>
+                    }
+                </section>
+
+                <section class="cartao projeto__bloco" aria-labelledby="pj-checklist">
+                    <h2 id="pj-checklist" class="rotulo">Checklist · @r.ChecklistFeitos de @r.ChecklistTotal</h2>
+                    @foreach (var i in p.Itens.Where(i => i.Tipo == TipoItemProjeto.Checklist))
+                    {
+                        <div class="tarefa">
+                            <label class="tarefa__marcar">
+                                <input type="checkbox" checked="@i.Feito" @onchange="() => AlternarItem(i.Id)" />
+                                <span class="tarefa__titulo @(i.Feito ? "tarefa__titulo--feita" : "")">@i.Texto</span>
+                            </label>
+                            <button type="button" class="botao-icone botao-icone--discreto" aria-label="Tirar da lista: @i.Texto" @onclick="() => ExcluirItem(i.Id)">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+                            </button>
+                        </div>
+                    }
+                    <div class="nova nova--compacta">
+                        <label class="so-leitor" for="pj-novo-item">Novo item da lista</label>
+                        <input id="pj-novo-item" type="text" autocomplete="off" placeholder="Novo item (ex.: protetor solar)" @bind="_novoItem" @bind:event="oninput" @onkeydown="TeclaItem" />
+                        <button type="button" class="botao botao--primario" disabled="@string.IsNullOrWhiteSpace(_novoItem)" @onclick="CriarItem">Adicionar</button>
+                    </div>
+                </section>
+            </div>
+
+            <div class="projeto__coluna">
+                <section class="cartao projeto__bloco" aria-labelledby="pj-marcos">
+                    <h2 id="pj-marcos" class="rotulo">Datas importantes</h2>
+                    @if (!p.Itens.Any(i => i.Tipo == TipoItemProjeto.Marco)) { <p class="vazio">Voo, check-in, reunião, entrega parcial… aparecem no calendário.</p> }
+                    @foreach (var m in p.Itens.Where(i => i.Tipo == TipoItemProjeto.Marco))
+                    {
+                        <div class="detalhe__item @(m.Data < Hoje ? "projeto__passado" : "")">
+                            <span><strong>@m.Data?.ToString("dd/MM")@(m.Hora is { } h ? " " + h.ToString("HH:mm") : "")</strong> · @m.Texto</span>
+                            <button type="button" class="botao-icone botao-icone--discreto" aria-label="Apagar data: @m.Texto" @onclick="() => ExcluirItem(m.Id)">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+                            </button>
+                        </div>
+                    }
+                    <div class="projeto__novo-marco">
+                        <label class="so-leitor" for="pj-marco-texto">O que acontece</label>
+                        <input id="pj-marco-texto" type="text" autocomplete="off" placeholder="Ex.: voo de ida" @bind="_marcoTexto" @bind:event="oninput" />
+                        <label class="so-leitor" for="pj-marco-data">Data</label>
+                        <input id="pj-marco-data" class="projeto__data" type="date" @bind="_marcoData" />
+                        <label class="so-leitor" for="pj-marco-hora">Hora (opcional)</label>
+                        <input id="pj-marco-hora" class="projeto__data" type="time" @bind="_marcoHora" />
+                        <button type="button" class="botao botao--primario" disabled="@(string.IsNullOrWhiteSpace(_marcoTexto) || _marcoData is null)" @onclick="CriarMarco">Adicionar</button>
+                    </div>
+                </section>
+
+                <section class="cartao projeto__bloco" aria-labelledby="pj-gastos">
+                    <div class="projeto__bloco-topo">
+                        <h2 id="pj-gastos" class="rotulo">Gastos e receitas</h2>
+                        <button type="button" class="botao botao--fantasma botao--pequeno" @onclick='() => Eventos.SolicitarLancamento("despesa", Id)'>+ Lançar</button>
+                    </div>
+                    @if (p.Lancamentos.Count == 0) { <p class="vazio">Nada lançado. Use + Lançar ou a frase: <em>hotel 1200 #@Apelido(r.Nome)</em></p> }
+                    @foreach (var l in p.Lancamentos)
+                    {
+                        <button type="button" class="registro" aria-label="Editar @l.Categoria, @Dinheiro(l.ValorCentavos)" @onclick="() => Eventos.SolicitarEdicao(new(Favoa.Core.Edicao.TipoReferencia.Lancamento, l.Id))">
+                            <span>@l.Data.ToString("dd/MM") · @l.Categoria</span>
+                            <span class="registro__valor">@(l.Receita ? "+ " : "− ")@Dinheiro(l.ValorCentavos)</span>
+                        </button>
+                    }
+                </section>
+
+                <section class="cartao projeto__bloco" aria-labelledby="pj-notas">
+                    <h2 id="pj-notas" class="rotulo">Notas e links</h2>
+                    @foreach (var n in p.Itens.Where(i => i.Tipo == TipoItemProjeto.Nota))
+                    {
+                        <div class="projeto__nota">
+                            <p>
+                                @foreach (var (texto, link) in Partes(n.Texto))
+                                {
+                                    if (link) { <a href="@texto" target="_blank" rel="noopener noreferrer">@texto</a> }
+                                    else { @texto }
+                                }
+                            </p>
+                            <button type="button" class="botao-icone botao-icone--discreto" aria-label="Apagar nota" @onclick="() => ExcluirItem(n.Id)">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+                            </button>
+                        </div>
+                    }
+                    <label class="so-leitor" for="pj-nota">Nova nota</label>
+                    <textarea id="pj-nota" rows="2" placeholder="Endereço do hotel, link da reserva, ideias…" @bind="_nota" @bind:event="oninput"></textarea>
+                    <div class="dados__acoes">
+                        <button type="button" class="botao botao--primario botao--pequeno" disabled="@string.IsNullOrWhiteSpace(_nota)" @onclick="CriarNota">Salvar nota</button>
+                    </div>
+                </section>
+
+                <section class="projeto__perigo">
+                    @if (!_confirmandoExclusao)
+                    {
+                        <button type="button" class="botao botao--perigo-texto botao--pequeno" @onclick="() => _confirmandoExclusao = true">Excluir projeto…</button>
+                    }
+                    else
+                    {
+                        <p class="dados__dica">Apagar @r.Nome e a lista, as datas e as notas dele? As tarefas e os lançamentos continuam no Fávoa.</p>
+                        <div class="dados__acoes">
+                            <button type="button" class="botao botao--perigo" @onclick="Excluir">Excluir</button>
+                            <button type="button" class="botao botao--fantasma" @onclick="() => _confirmandoExclusao = false">Cancelar</button>
+                        </div>
+                    }
+                </section>
+            </div>
+        </div>
+    }
+</main>
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private static readonly SituacaoProjeto[] Situacoes =
+        [SituacaoProjeto.Ideia, SituacaoProjeto.Planejando, SituacaoProjeto.EmAndamento, SituacaoProjeto.Pausado, SituacaoProjeto.Concluido];
+    private static DateOnly Hoje => EventosFavoa.Hoje;
+
+    private ProjetoDetalhe? _p;
+    private bool _carregado;
+    private bool _editando;
+    private bool _confirmandoExclusao;
+    private string? _novaTarefa;
+    private DateOnly? _prazoTarefa;
+    private string? _novoItem;
+    private string? _marcoTexto;
+    private DateOnly? _marcoData;
+    private TimeOnly? _marcoHora;
+    private string? _nota;
+
+    protected override void OnInitialized() => Eventos.RegistroSalvo += AoSalvarFora;
+
+    protected override async Task OnParametersSetAsync() => await Recarregar();
+
+    private async Task Recarregar()
+    {
+        _p = await Servico.ObterAsync(Id, Hoje);
+        _carregado = true;
+    }
+
+    private async Task AoSalvarFora()
+    {
+        await Recarregar();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task Avisar(ResultadoRegistro r)
+    {
+        Eventos.MostrarMensagem(r.Mensagem);
+        await Eventos.NotificarRegistroSalvoAsync();
+    }
+
+    private async Task TrocarSituacao(ChangeEventArgs e)
+    {
+        if (_p is null || !Enum.TryParse<SituacaoProjeto>(e.Value?.ToString(), out var s)) return;
+        var r = _p.Resumo;
+        await Avisar(await Servico.SalvarAsync(new DadosProjeto(r.Id, r.Nome, r.Tipo, s, r.Inicio, r.Fim, r.OrcamentoCentavos, _p.Descricao, r.DaCasa)));
+    }
+
+    private async Task AoEditar(Guid _)
+    {
+        _editando = false;
+        await Avisar(new ResultadoRegistro(true, "Projeto salvo."));
+    }
+
+    private async Task CriarTarefa()
+    {
+        if (string.IsNullOrWhiteSpace(_novaTarefa)) return;
+        var r = await Servico.CriarTarefaAsync(Id, _novaTarefa, _prazoTarefa);
+        if (r.Sucesso) { _novaTarefa = null; _prazoTarefa = null; }
+        await Avisar(r);
+    }
+
+    private async Task TeclaTarefa(KeyboardEventArgs e) { if (e.Key == "Enter") await CriarTarefa(); }
+    private async Task TeclaItem(KeyboardEventArgs e) { if (e.Key == "Enter") await CriarItem(); }
+
+    private async Task AlternarTarefa(Guid id)
+    {
+        await Registros.AlternarTarefaAsync(id, Hoje);
+        await Eventos.NotificarRegistroSalvoAsync();
+    }
+
+    private async Task CriarItem()
+    {
+        if (string.IsNullOrWhiteSpace(_novoItem)) return;
+        var r = await Servico.SalvarItemAsync(new DadosItemProjeto(null, Id, TipoItemProjeto.Checklist, _novoItem, null, null));
+        if (r.Sucesso) _novoItem = null;
+        await Recarregar();
+        if (!r.Sucesso) Eventos.MostrarMensagem(r.Mensagem);
+    }
+
+    private async Task CriarMarco()
+    {
+        var r = await Servico.SalvarItemAsync(new DadosItemProjeto(null, Id, TipoItemProjeto.Marco, _marcoTexto ?? "", _marcoData, _marcoHora));
+        if (r.Sucesso) { _marcoTexto = null; _marcoData = null; _marcoHora = null; }
+        await Avisar(r);
+    }
+
+    private async Task CriarNota()
+    {
+        var r = await Servico.SalvarItemAsync(new DadosItemProjeto(null, Id, TipoItemProjeto.Nota, _nota ?? "", null, null));
+        if (r.Sucesso) _nota = null;
+        await Recarregar();
+        if (!r.Sucesso) Eventos.MostrarMensagem(r.Mensagem);
+    }
+
+    private async Task AlternarItem(Guid id)
+    {
+        await Servico.AlternarItemAsync(id);
+        await Eventos.NotificarRegistroSalvoAsync();
+    }
+
+    private async Task ExcluirItem(Guid id)
+    {
+        await Servico.ExcluirItemAsync(id);
+        await Eventos.NotificarRegistroSalvoAsync();
+    }
+
+    private async Task Excluir()
+    {
+        var r = await Servico.ExcluirAsync(Id);
+        Eventos.MostrarMensagem(r.Mensagem);
+        if (r.Sucesso) Nav.NavigateTo("projetos");
+    }
+
+    private static string Dinheiro(long c) => Favoa.Core.Captura.Texto.FormatarMoeda(c);
+
+    /// <summary>Apelido para o #: a palavra mais marcante do nome ("Viagem Chile" → chile).</summary>
+    private static string Apelido(string nome)
+    {
+        var comuns = new[] { "viagem", "projeto", "reforma", "trabalho", "de", "da", "do", "para" };
+        var palavras = Favoa.Core.Captura.Texto.Normalizar(nome).Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return palavras.FirstOrDefault(p => !comuns.Contains(p) && p.Length > 2) ?? palavras.FirstOrDefault() ?? "projeto";
+    }
+
+    private static string Periodo(ProjetoResumo r)
+    {
+        var (ini, fim) = r.Tipo switch
+        {
+            TipoProjeto.Viagem => ("Ida", "volta"),
+            TipoProjeto.Trabalho => ("Início", "entrega"),
+            _ => ("Início", "fim"),
+        };
+        var partes = new List<string> { TiposProjeto.Nome(r.Situacao) };
+        if (r.Inicio is { } i) partes.Add($"{ini} {i:dd/MM/yyyy}");
+        if (r.Fim is { } f) partes.Add($"{(r.Inicio is null ? char.ToUpper(fim[0]) + fim[1..] : fim)} {f:dd/MM/yyyy}");
+        return string.Join(" · ", partes);
+    }
+
+    private static readonly Regex RxLink = new(@"https?://\S+", RegexOptions.Compiled);
+
+    /// <summary>Divide a nota em texto e links (só http/https viram link).</summary>
+    private static IEnumerable<(string Texto, bool Link)> Partes(string texto)
+    {
+        var pos = 0;
+        foreach (Match m in RxLink.Matches(texto))
+        {
+            if (m.Index > pos) yield return (texto[pos..m.Index], false);
+            yield return (m.Value.TrimEnd('.', ',', ')'), true);
+            pos = m.Index + m.Value.TrimEnd('.', ',', ')').Length;
+        }
+        if (pos < texto.Length) yield return (texto[pos..], false);
+    }
+
+    public void Dispose() => Eventos.RegistroSalvo -= AoSalvarFora;
+}

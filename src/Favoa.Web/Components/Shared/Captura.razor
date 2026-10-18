@@ -1,0 +1,233 @@
+@implements IAsyncDisposable
+@inject IFavoaServico Servico
+@inject EventosFavoa Eventos
+@inject IJSRuntime JS
+
+@if (_aberta)
+{
+    <div class="captura-fundo" @onclick="Fechar"></div>
+    <div class="captura" role="dialog" aria-modal="true" aria-label="Captura universal">
+        <div class="captura__entrada">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--mel)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+            <label for="captura-texto" class="so-leitor">O que aconteceu?</label>
+            <input id="captura-texto" type="text" autocomplete="off" spellcheck="false" enterkeyhint="done"
+                   placeholder="O que aconteceu?"
+                   value="@_texto" @oninput="AoDigitar" @onkeydown="AoTeclar" />
+        </div>
+
+        @if (_interp.Tipo != TipoCaptura.Desconhecido || !string.IsNullOrWhiteSpace(_texto))
+        {
+            <div class="captura__previa">
+                <div class="rotulo">Vou registrar assim</div>
+                <div class="chips">
+                    <span class="chip chip--modulo @(_interp.PodeSalvar ? "" : "chip--apagado")">@_interp.Modulo</span>
+                    @foreach (var campo in Campos(_interp))
+                    {
+                        <span class="chip">@campo</span>
+                    }
+                </div>
+                @if (EhDinheiro && _ctx.CategoriasDo(_interp.Tipo).Count > 0)
+                {
+                    <div class="pilulas captura__categorias" role="radiogroup" aria-label="Categoria">
+                        @foreach (var c in _ctx.CategoriasDo(_interp.Tipo))
+                        {
+                            <button type="button" role="radio" aria-checked="@(c == _interp.Categoria)"
+                                    class="pilula pilula--pequena @(c == _interp.Categoria ? "pilula--feita" : "")" @onclick="() => EscolherCategoria(c)">@c</button>
+                        }
+                    </div>
+                }
+                @if (_interp.Aviso is not null)
+                {
+                    <p class="captura__aviso">@_interp.Aviso</p>
+                }
+                else
+                {
+                    <p class="captura__dica">Algo errado? Ajuste a frase e a prévia muda na hora.</p>
+                }
+                <div class="captura__acoes">
+                    <button type="button" class="botao botao--primario" disabled="@(!_interp.PodeSalvar || _salvando)" @onclick="Salvar">Salvar</button>
+                </div>
+            </div>
+        }
+
+        <div class="captura__exemplos @(string.IsNullOrWhiteSpace(_texto) ? "" : "captura__exemplos--digitando")">
+            <div class="rotulo">Também entendo</div>
+            @foreach (var (frase, modulo) in Exemplos)
+            {
+                <button type="button" class="exemplo" @onclick="() => UsarExemplo(frase)">
+                    <span>@frase</span><span class="exemplo__modulo">@modulo</span>
+                </button>
+            }
+        </div>
+
+        <div class="captura__rodape so-pc-flex">
+            <span><kbd>Enter</kbd> salvar</span>
+            <span><kbd>Esc</kbd> fechar</span>
+        </div>
+    </div>
+}
+
+@code {
+    private bool _aberta;
+    private string _texto = "";
+    private bool _salvando;
+    private ContextoCaptura _ctx = ContextoCaptura.Vazio(EventosFavoa.Hoje);
+    private Interpretacao _interp = Interpretacao.Vazia(EventosFavoa.Hoje);
+    private DotNetObjectReference<Captura>? _ref;
+    private string? _escolhida; // categoria tocada nos botões: vale mais que a da frase
+
+    private bool EhDinheiro => _interp.Tipo is TipoCaptura.Despesa or TipoCaptura.Receita;
+
+    /// <summary>
+    /// Lançamento só entra em categoria cadastrada. A da frase vale se existir; senão, a tocada nos botões;
+    /// sem nenhuma, pede para escolher. Sem descrição livre: o lançamento é a categoria.
+    /// </summary>
+    private Interpretacao Interpretar(string texto)
+    {
+        var i = InterpretadorFrase.Interpretar(texto, _ctx);
+        if (i.Projeto is not null && i.Aviso is null)
+        {
+            if (i.Tipo is not (TipoCaptura.Tarefa or TipoCaptura.Despesa or TipoCaptura.Receita))
+                i = i with { Aviso = "Só tarefas e lançamentos entram em projeto." };
+            else if (_ctx.ProjetoPorApelido(i.Projeto) is null)
+                i = i with { Aviso = $"Não achei o projeto #{i.Projeto}. Crie em Projetos ou confira o nome." };
+        }
+        if (i.Tipo is not (TipoCaptura.Despesa or TipoCaptura.Receita)) return i;
+
+        var categoria = _ctx.CategoriaCadastrada(i.Tipo, _escolhida) ?? _ctx.CategoriaCadastrada(i.Tipo, i.Categoria);
+        i = i with { Categoria = categoria, Descricao = null };
+        if (i.Aviso is null && categoria is null)
+            i = i with
+            {
+                Aviso = _ctx.CategoriasDo(i.Tipo).Count == 0
+                    ? $"Nenhuma categoria de {(i.Tipo == TipoCaptura.Receita ? "receita" : "despesa")} cadastrada. Crie em Cadastros > Categorias."
+                    : "Escolha a categoria abaixo.",
+            };
+        return i;
+    }
+
+    private async Task EscolherCategoria(string categoria)
+    {
+        _escolhida = categoria;
+        _interp = Interpretar(_texto);
+        await JS.InvokeVoidAsync("favoa.focar", "captura-texto");
+    }
+
+    private static readonly (string Frase, string Modulo)[] Exemplos =
+    [
+        ("uber 23", "Finanças"),
+        ("mercado 150 no nubank", "Finanças"),
+        ("bebi 500 ml de água", "Alimentação"),
+        ("tarefa pagar condomínio sexta", "Tarefas"),
+        ("novo hábito ler 20 min", "Hábitos"),
+        ("orçamento 3000", "Finanças"),
+        ("tarefa comprar adaptador #viagem", "Projetos"),
+        ("tarefa dentista amanhã às 15h avisar 1h antes", "Tarefas"),
+    ];
+
+    protected override void OnInitialized() => Eventos.AbrirCapturaSolicitado += AbrirPeloEvento;
+
+    protected override async Task OnAfterRenderAsync(bool primeira)
+    {
+        if (primeira)
+        {
+            _ref = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("favoa.registrarAtalho", _ref);
+        }
+    }
+
+    [JSInvokable]
+    public Task AbrirPeloAtalho() => InvokeAsync(Abrir);
+
+    private void AbrirPeloEvento() => _ = InvokeAsync(Abrir);
+
+    private async Task Abrir()
+    {
+        if (_aberta) return;
+        _ctx = await Servico.ObterContextoAsync(EventosFavoa.Hoje);
+        _texto = "";
+        _escolhida = null;
+        _interp = Interpretacao.Vazia(_ctx.Hoje);
+        _aberta = true;
+        StateHasChanged();
+        await Task.Yield();
+        await JS.InvokeVoidAsync("favoa.focar", "captura-texto");
+    }
+
+    private void Fechar() => _aberta = false;
+
+    private void AoDigitar(ChangeEventArgs e)
+    {
+        _texto = e.Value?.ToString() ?? "";
+        _interp = Interpretar(_texto);
+    }
+
+    private async Task UsarExemplo(string frase)
+    {
+        _texto = frase;
+        _escolhida = null;
+        _interp = Interpretar(frase);
+        await JS.InvokeVoidAsync("favoa.focar", "captura-texto");
+    }
+
+    private async Task AoTeclar(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape") Fechar();
+        else if (e.Key == "Enter") await Salvar();
+    }
+
+    private async Task Salvar()
+    {
+        if (_salvando || string.IsNullOrWhiteSpace(_texto)) return;
+        if (!_interp.PodeSalvar) return; // o aviso já está na tela
+
+        _salvando = true;
+        try
+        {
+            var resultado = await Servico.RegistrarAsync(_interp);
+            Eventos.MostrarMensagem(resultado.Mensagem, resultado.Sucesso ? resultado.Criado : null);
+            if (!resultado.Sucesso) return;
+
+            _aberta = false;
+            await Eventos.NotificarRegistroSalvoAsync();
+        }
+        finally
+        {
+            _salvando = false;
+        }
+    }
+
+    private IEnumerable<string> Campos(Interpretacao i)
+    {
+        if (i.ValorCentavos is { } v) yield return Texto.FormatarMoeda(v);
+        if (i.Categoria is not null) yield return $"Categoria: {i.Categoria}";
+        else if (i.Tipo is TipoCaptura.Despesa or TipoCaptura.Receita) yield return "Categoria: escolha";
+        if (i.Tipo is TipoCaptura.Despesa or TipoCaptura.Receita) yield return $"Conta: {i.Conta ?? "padrão"}";
+        if (i.Descricao is not null) yield return $"“{i.Descricao}”";
+        if (i.Mililitros is { } ml) yield return $"{ml} ml";
+        if (i.Titulo is not null) yield return i.Titulo;
+        if (i.Tipo is TipoCaptura.Cardio or TipoCaptura.Treino)
+        {
+            if (i.Minutos is { } mi) yield return $"{mi} min";
+            if (i.DistanciaKm is { } dk) yield return $"{dk.ToString("0.#", System.Globalization.CultureInfo.GetCultureInfo("pt-BR"))} km";
+            if (i.Intensidade is { } it) yield return Favoa.Core.Fitness.GastoCalorico.Rotulo(it);
+        }
+        if (i.Prazo is { } p) yield return $"Prazo: {p:ddd, dd/MM}";
+        if (i.Hora is { } h) yield return "Horário: " + h.ToString("HH:mm");
+        if (i.AvisoMinutos is { } av) yield return "Lembrete: " + Favoa.Core.Rotina.AvisoTarefa.Rotulo(av).ToLowerInvariant();
+        if (i.Responsaveis.Count > 0) yield return "Quem faz: " + string.Join(", ", _ctx.Pessoas.Where(x => i.Responsaveis.Contains(x.Id)).Select(x => x.Nome));
+        if (i.Projeto is not null && _ctx.ProjetoPorApelido(i.Projeto) is { } proj) yield return $"Projeto: {proj}";
+        if (i.Tipo is TipoCaptura.Despesa or TipoCaptura.Receita or TipoCaptura.Agua)
+            yield return i.Data == EventosFavoa.Hoje ? "Hoje" : i.Data.ToString("dd/MM");
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        Eventos.AbrirCapturaSolicitado -= AbrirPeloEvento;
+
+        // Na pré-renderização o atalho nunca foi registrado (e JS não está disponível).
+        if (_ref is null) return;
+        try { await JS.InvokeVoidAsync("favoa.removerAtalho"); } catch (JSDisconnectedException) { }
+        _ref.Dispose();
+    }
+}

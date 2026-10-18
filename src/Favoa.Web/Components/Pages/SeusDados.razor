@@ -1,0 +1,314 @@
+@page "/dados"
+@using System.Globalization
+@using Favoa.Core.Dados
+@inject IDadosFavoa Dados
+@inject EventosFavoa Eventos
+@inject IJSRuntime JS
+@inject Favoa.Core.Pessoas.IPessoaAtual PessoaAtual
+
+<PageTitle>Seus dados · Fávoa</PageTitle>
+
+<main class="modulo">
+    <header class="pagina__topo">
+        <div class="pagina__titulo">
+            <h1>Seus dados</h1>
+            <p class="pagina__resumo"><span>Tudo fica neste computador. Nada sai daqui sem você pedir.</span></p>
+        </div>
+    </header>
+
+    @if (_info is null)
+    {
+        <p class="carregando">Carregando…</p>
+    }
+    else
+    {
+        @if (_administra)
+        {
+<section class="cartao dados__bloco" aria-labelledby="t-seguro">
+            <div class="dados__titulo-linha">
+                <h2 id="t-seguro" class="rotulo">Seus dados estão seguros</h2>
+                <button type="button" class="botao botao--fantasma botao--pequeno" disabled="@_ocupado" @onclick="BackupAgora">Fazer backup agora</button>
+            </div>
+            <p>@(_info.Backups.Count == 0 ? "O primeiro backup sai alguns segundos depois de abrir o app." : $"Último backup: {_info.Backups[0].CriadoEm:dd/MM/yyyy HH:mm}. O Fávoa faz um sozinho todo dia.")</p>
+            <p class="dados__meta">@Resumo(_info.Contagem)</p>
+        </section>
+        }
+
+
+        <PessoasAcesso />
+
+        @if (!_administra)
+        {
+            <p class="dados__dica">Backup, exportar e importar ficam com quem criou a conta da família.</p>
+        }
+
+        @if (_administra)
+        {
+<section class="cartao dados__bloco" aria-labelledby="t-exportar">
+            <h2 id="t-exportar" class="rotulo">Exportar</h2>
+            <div class="dados__acoes">
+                <button type="button" class="botao botao--primario" disabled="@_ocupado" @onclick="ExportarJson">Tudo em JSON</button>
+                <span class="dados__meta">Cópia completa, para guardar ou importar em outro computador.</span>
+            </div>
+            <div class="dados__acoes">
+                @foreach (var (rotulo, modulo) in Modulos)
+                {
+                    <button type="button" class="botao" disabled="@_ocupado" @onclick="() => ExportarCsv(modulo)">@rotulo</button>
+                }
+                <span class="dados__meta">Planilhas CSV que abrem direto no Excel.</span>
+            </div>
+        </section>
+        }
+
+
+        <section class="cartao dados__bloco" aria-labelledby="t-tema">
+            <h2 id="t-tema" class="rotulo">Aparência</h2>
+            <EscolhaTema />
+            <p class="dados__dica">Vale só neste aparelho. "Automático" segue o tema do celular ou do computador.</p>
+        </section>
+
+        @if (_administra)
+        {
+<details class="avancado">
+            <summary>Avançado: pasta dos dados, cópia no OneDrive, importar e recomeçar</summary>
+        <section class="cartao dados__bloco" aria-labelledby="t-onde">
+            <h2 id="t-onde" class="rotulo">Onde estão</h2>
+            <dl class="dados__lista">
+                <div><dt>Banco</dt><dd><code>@_info.CaminhoBanco</code> <span class="dados__meta">@Tamanho(_info.TamanhoBancoBytes)</span></dd></div>
+                <div><dt>Backups</dt><dd><code>@_info.PastaBackups</code></dd></div>
+                <div><dt>Conteúdo</dt><dd>@Resumo(_info.Contagem)</dd></div>
+            </dl>
+            <p class="dados__dica">Um backup é feito sozinho todo dia (os últimos 14 ficam guardados). Para ter uma cópia fora do PC, ligue a cópia no OneDrive logo abaixo.</p>
+        </section>
+
+        <CopiaOneDrive />
+
+        <section class="cartao dados__bloco" aria-labelledby="t-backups">
+            <div class="dados__titulo-linha">
+                <h2 id="t-backups" class="rotulo">Backups</h2>
+                <button type="button" class="botao botao--fantasma botao--pequeno" disabled="@_ocupado" @onclick="BackupAgora">Fazer backup agora</button>
+            </div>
+            @if (_info.Backups.Count == 0)
+            {
+                <p class="vazio">Ainda nenhum. O primeiro sai alguns segundos depois de abrir o app.</p>
+            }
+            else
+            {
+                <ul class="dados__backups">
+                    @foreach (var b in _info.Backups.Take(_verTodos ? 20 : 5))
+                    {
+                        <li><span>@Rotulo(b.Nome)</span><span class="dados__meta">@b.CriadoEm.ToString("dd/MM/yyyy HH:mm") · @Tamanho(b.Bytes)</span></li>
+                    }
+                </ul>
+                @if (_info.Backups.Count > 5)
+                {
+                    <button type="button" class="botao botao--fantasma botao--pequeno dados__mais" @onclick="() => _verTodos = !_verTodos">@(_verTodos ? "Mostrar menos" : $"Ver todos ({_info.Backups.Count})")</button>
+                }
+                <p class="dados__dica">Para restaurar um backup: feche o Fávoa, copie o arquivo para o lugar do banco com o nome <code>favoa.db</code> e abra de novo.</p>
+            }
+        </section>
+
+        <section class="cartao dados__bloco" aria-labelledby="t-importar">
+            <h2 id="t-importar" class="rotulo">Importar</h2>
+            <p class="dados__dica">Escolha um JSON exportado pelo Fávoa. Ele <strong>substitui</strong> todos os dados atuais; antes disso o Fávoa salva um backup.</p>
+
+            <label class="botao arquivo">
+                <span>Escolher arquivo…</span>
+                <InputFile accept=".json,application/json" OnChange="AoEscolherArquivo" class="so-leitor" />
+            </label>
+
+            @if (_analise is { } a)
+            {
+                @if (!a.Valido)
+                {
+                    <p class="captura__aviso" role="alert">@a.Mensagem</p>
+                }
+                else
+                {
+                    <div class="importacao" role="region" aria-label="Confirmar importação">
+                        <div class="importacao__colunas">
+                            <div>
+                                <div class="rotulo">Hoje no Fávoa</div>
+                                <p>@Resumo(_info.Contagem)</p>
+                            </div>
+                            <div>
+                                <div class="rotulo">No arquivo@(a.ExportadoEm is { } em ? $" ({em.ToLocalTime():dd/MM/yyyy HH:mm})" : "")</div>
+                                <p>@Resumo(a.NoArquivo!)</p>
+                            </div>
+                        </div>
+                        <div class="dados__acoes">
+                            <button type="button" class="botao botao--perigo" disabled="@_ocupado" @onclick="Importar">Substituir pelos dados do arquivo</button>
+                            <button type="button" class="botao botao--fantasma" @onclick="Cancelar">Cancelar</button>
+                        </div>
+                    </div>
+                }
+            }
+        </section>
+
+            <section class="cartao dados__bloco" aria-labelledby="t-zerar">
+                <h2 id="t-zerar" class="rotulo">Começar do zero</h2>
+                <p class="dados__dica">
+                    Apaga os registros de <strong>todos da casa</strong>: lançamentos, recorrências, tarefas, hábitos, água, treinos feitos,
+                    refeições, peso, lembretes e projetos. Ficam as pessoas e os acessos, os aparelhos com notificação, as configurações e metas,
+                    as contas, as categorias com limite, as fichas de treino e o plano da dieta. Antes, o Fávoa salva um backup.
+                </p>
+                @if (!_confirmandoZerar)
+                {
+                    <div class="dados__acoes">
+                        <button type="button" class="botao botao--perigo-texto" @onclick="() => _confirmandoZerar = true">Começar do zero…</button>
+                    </div>
+                }
+                else
+                {
+                    <div class="campo">
+                        <label for="confirma-zerar">Para confirmar, escreva ZERAR</label>
+                        <input id="confirma-zerar" type="text" autocomplete="off" @bind="_textoZerar" @bind:event="oninput" />
+                    </div>
+                    <div class="dados__acoes">
+                        <button type="button" class="botao botao--perigo" disabled="@(_ocupado || _textoZerar?.Trim().ToUpperInvariant() != "ZERAR")" @onclick="Zerar">Apagar os registros</button>
+                        <button type="button" class="botao botao--fantasma" @onclick="CancelarZerar">Cancelar</button>
+                    </div>
+                }
+            </section>
+
+        </details>
+        }
+
+
+        <p class="dados__versao">
+            Versão <strong>@VersaoFavoa.Codigo</strong> · compilada em @VersaoFavoa.PublicadaEm.ToString("dd/MM/yyyy HH:mm").
+            Para atualizar, use o ícone <strong>Atualizar Fávoa</strong> na área de trabalho do PC.
+        </p>
+    }
+</main>
+
+@code {
+    private const long LimiteArquivo = 50 * 1024 * 1024;
+
+    private static readonly (string Rotulo, ModuloCsv Modulo)[] Modulos =
+    [
+        ("Lançamentos", ModuloCsv.Lancamentos), ("Tarefas", ModuloCsv.Tarefas),
+        ("Hábitos", ModuloCsv.Habitos), ("Água", ModuloCsv.Agua),
+        ("Treinos", ModuloCsv.Treinos), ("Refeições", ModuloCsv.Refeicoes), ("Peso", ModuloCsv.Peso),
+    ];
+
+    private InformacoesDados? _info;
+    private AnaliseImportacao? _analise;
+    private byte[]? _arquivo;
+    private bool _ocupado;
+    private bool _verTodos;
+    private bool _confirmandoZerar;
+    private string? _textoZerar;
+    private bool _administra;
+
+    private void CancelarZerar()
+    {
+        _confirmandoZerar = false;
+        _textoZerar = null;
+    }
+
+    private async Task Zerar()
+    {
+        _ocupado = true;
+        try
+        {
+            var r = await Dados.ComecarDoZeroAsync();
+            Eventos.MostrarMensagem(r.Mensagem);
+            CancelarZerar();
+            await Recarregar();
+            await Eventos.NotificarRegistroSalvoAsync();
+        }
+        finally { _ocupado = false; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Backup, exportar, importar e recomeçar valem para a base inteira: só o dono da casa, e só enquanto há uma família.
+        _administra = PessoaAtual is Favoa.Web.PessoaDoUsuario { Dono: true } && await Dados.BancoDeUmaFamiliaAsync();
+        await Recarregar();
+    }
+
+    private async Task Recarregar() => _info = await Dados.ObterInformacoesAsync();
+
+    private async Task Ocupado(Func<Task> acao)
+    {
+        if (_ocupado) return;
+        _ocupado = true;
+        try { await acao(); }
+        finally { _ocupado = false; }
+    }
+
+    private Task BackupAgora() => Ocupado(async () =>
+    {
+        var caminho = await Dados.FazerBackupAgoraAsync();
+        Eventos.MostrarMensagem($"Backup salvo: {Path.GetFileName(caminho)}");
+        await Recarregar();
+    });
+
+    private Task ExportarJson() => Ocupado(async () => await Baixar(await Dados.ExportarJsonAsync()));
+
+    private Task ExportarCsv(ModuloCsv modulo) => Ocupado(async () => await Baixar(await Dados.ExportarCsvAsync(modulo)));
+
+    private async Task Baixar(ArquivoGerado arquivo)
+    {
+        using var stream = new MemoryStream(arquivo.Conteudo);
+        using var referencia = new DotNetStreamReference(stream);
+        await JS.InvokeVoidAsync("favoa.baixar", arquivo.Nome, arquivo.TipoConteudo, referencia);
+    }
+
+    private async Task AoEscolherArquivo(InputFileChangeEventArgs e)
+    {
+        _analise = null;
+        _arquivo = null;
+        if (e.File.Size > LimiteArquivo)
+        {
+            _analise = new AnaliseImportacao(false, "Arquivo grande demais (máximo 50 MB).", null, null);
+            return;
+        }
+
+        using var memoria = new MemoryStream();
+        await e.File.OpenReadStream(LimiteArquivo).CopyToAsync(memoria);
+        _arquivo = memoria.ToArray();
+        _analise = await Dados.AnalisarImportacaoAsync(_arquivo);
+    }
+
+    private Task Importar() => Ocupado(async () =>
+    {
+        if (_arquivo is null) return;
+        var r = await Dados.ImportarJsonAsync(_arquivo);
+        Eventos.MostrarMensagem(r.Mensagem);
+        if (r.Sucesso)
+        {
+            Cancelar();
+            await Eventos.NotificarRegistroSalvoAsync();
+        }
+        await Recarregar();
+    });
+
+    private void Cancelar()
+    {
+        _analise = null;
+        _arquivo = null;
+    }
+
+    private static string Resumo(ContagemDados c) =>
+        c.Total == 0
+            ? "vazio"
+            : string.Join(", ",
+                P(c.Lancamentos, "lançamento", "lançamentos"), P(c.Contas, "conta", "contas"), P(c.Tarefas, "tarefa", "tarefas"),
+                $"{P(c.Habitos, "hábito", "hábitos")} ({P(c.RegistrosHabito, "marcação", "marcações")})",
+                P(c.RegistrosAgua, "registro de água", "registros de água"));
+
+    private static string P(int n, string um, string varios) => $"{n} {(n == 1 ? um : varios)}";
+
+    private static string Rotulo(string nome) =>
+        nome.StartsWith("antes-importar-") ? "Antes de importar"
+        : nome.StartsWith("manual-") ? "Manual"
+        : nome.StartsWith("favoa-") ? "Diário"
+        : nome;
+
+    private static string Tamanho(long bytes) =>
+        bytes >= 1024 * 1024 ? (bytes / 1024.0 / 1024.0).ToString("0.#", CultureInfo.GetCultureInfo("pt-BR")) + " MB"
+        : bytes >= 1024 ? (bytes / 1024.0).ToString("0.#", CultureInfo.GetCultureInfo("pt-BR")) + " KB"
+        : $"{bytes} B";
+}

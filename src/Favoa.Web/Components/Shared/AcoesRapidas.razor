@@ -1,0 +1,66 @@
+@using Favoa.Core.Painel
+@implements IDisposable
+@inject IFavoaServico Servico
+@inject EventosFavoa Eventos
+@inject NavigationManager Nav
+
+@* Só no celular: os 3 registros que esta pessoa mais faz (últimos 14 dias), logo abaixo da saudação. *@
+<div class="acoes-rapidas" role="group" aria-label="Registrar rápido">
+    @foreach (var chave in _atalhos)
+    {
+        var k = chave;
+        <button type="button" class="acoes-rapidas__botao @(k == _atalhos[0] ? "acoes-rapidas__botao--principal" : "")" @onclick="() => Acionar(k)">
+            @switch (k)
+            {
+                case AtalhosRapidos.Despesa:
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+                    <span>Despesa</span>
+                    break;
+                case AtalhosRapidos.Agua:
+                    <span>+ 250 ml</span>
+                    break;
+                case AtalhosRapidos.Treino:
+                    <span>Treino</span>
+                    break;
+                default:
+                    <span>Peso</span>
+                    break;
+            }
+        </button>
+    }
+</div>
+
+@code {
+    private IReadOnlyList<string> _atalhos = [AtalhosRapidos.Despesa, AtalhosRapidos.Agua, AtalhosRapidos.Treino];
+
+    protected override async Task OnInitializedAsync()
+    {
+        Eventos.RegistroSalvo += Recarregar;
+        await Carregar();
+    }
+
+    private async Task Carregar()
+    {
+        try { _atalhos = AtalhosRapidos.Escolher(await Servico.ObterUsoRecenteAsync(EventosFavoa.Hoje)); }
+        catch { /* fica com os atalhos padrão */ }
+    }
+
+    private async Task Recarregar()
+    {
+        await Carregar();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task Acionar(string chave)
+    {
+        switch (chave)
+        {
+            case AtalhosRapidos.Despesa: Eventos.SolicitarLancamento("despesa"); break;
+            case AtalhosRapidos.Agua: await AguaRapida.RegistrarAsync(Servico, Eventos, 250); break;
+            case AtalhosRapidos.Treino: Nav.NavigateTo("treino"); break;
+            default: Nav.NavigateTo("medidas?peso=1"); break;
+        }
+    }
+
+    public void Dispose() => Eventos.RegistroSalvo -= Recarregar;
+}

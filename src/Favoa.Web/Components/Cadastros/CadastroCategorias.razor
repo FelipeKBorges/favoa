@@ -1,0 +1,183 @@
+@using Favoa.Core.Financas
+@inject ICadastrosServico Cadastros
+@inject EventosFavoa Eventos
+
+@if (_quadro is null)
+{
+    <p class="carregando">Carregando…</p>
+}
+else
+{
+    <div class="cadastros__colunas">
+        @foreach (var (tipo, titulo) in Tipos)
+        {
+            var lista = _quadro.Categorias.Where(c => c.Tipo == tipo).ToList();
+            <section class="cartao cadastro" aria-labelledby="cat-@tipo">
+                <div class="cadastro__topo">
+                    <h2 id="cat-@tipo">@titulo</h2>
+                    <button type="button" class="botao botao--fantasma botao--pequeno" @onclick="() => Novo(tipo)">+ Nova</button>
+                </div>
+                @if (tipo == TipoLancamento.Despesa)
+                {
+                    <p class="cadastro__dica">Defina um limite por mês para ver em Finanças quanto ainda dá para gastar em cada categoria.</p>
+                }
+
+                @if (_editando is { } ed && ed.Id is null && ed.Tipo == tipo)
+                {
+                    @FormularioCategoria(ed)
+                }
+
+                <ul class="cadastro__lista">
+                    @foreach (var c in lista)
+                    {
+                        <li class="cadastro__item">
+                            @if (_editando is { } e && e.Id == c.Id)
+                            {
+                                @FormularioCategoria(e)
+                            }
+                            else if (_excluindo == c.Id)
+                            {
+                                <div class="cadastro__confirmar">
+                                    @if (c.Lancamentos > 0)
+                                    {
+                                        <label for="mover-@c.Id">@c.Lancamentos lançamento(s) de <strong>@c.Nome</strong> vão para:</label>
+                                        <select id="mover-@c.Id" class="seletor" @bind="_moverPara">
+                                            <option value="">Escolha…</option>
+                                            @foreach (var outra in lista.Where(o => o.Id != c.Id))
+                                            {
+                                                <option value="@outra.Id">@outra.Nome</option>
+                                            }
+                                        </select>
+                                    }
+                                    else
+                                    {
+                                        <span>Excluir <strong>@c.Nome</strong>?</span>
+                                    }
+                                    <div class="cadastro__acoes">
+                                        <button type="button" class="botao botao--perigo botao--pequeno" @onclick="() => Excluir(c)">@(c.Lancamentos > 0 ? "Mover e excluir" : "Excluir")</button>
+                                        <button type="button" class="botao botao--fantasma botao--pequeno" @onclick="Cancelar">Cancelar</button>
+                                    </div>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="cadastro__texto">
+                                    <span class="cadastro__nome">@c.Nome</span>
+                                    <span class="cadastro__sub">@Subtitulo(c)</span>
+                                    @if (c.FracaoOrcamento is { } f)
+                                    {
+                                        <span class="cadastro__barra @(f > 1 ? "cadastro__barra--estourada" : f >= 0.8 ? "cadastro__barra--alerta" : "")" aria-hidden="true">
+                                            <span style="width:@Largura(f)"></span>
+                                        </span>
+                                    }
+                                </div>
+                                <div class="cadastro__acoes">
+                                    <button type="button" class="botao-icone" aria-label="Editar @c.Nome" @onclick="() => Editar(c)">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z" /></svg>
+                                    </button>
+                                    <button type="button" class="botao-icone" aria-label="Excluir @c.Nome" @onclick="() => { _excluindo = c.Id; _moverPara = null; _editando = null; }">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12" /></svg>
+                                    </button>
+                                </div>
+                            }
+                        </li>
+                    }
+                </ul>
+            </section>
+        }
+    </div>
+}
+
+@code {
+    private static readonly (TipoLancamento Tipo, string Titulo)[] Tipos = [(TipoLancamento.Despesa, "Despesas"), (TipoLancamento.Receita, "Receitas")];
+
+    private sealed class Edicao
+    {
+        public Guid? Id { get; init; }
+        public TipoLancamento Tipo { get; init; }
+        public string Nome { get; set; } = "";
+        public string Limite { get; set; } = "";
+        public string? Erro { get; set; }
+    }
+
+    private QuadroCadastros? _quadro;
+    private Edicao? _editando;
+    private Guid? _excluindo;
+    private Guid? _moverPara;
+
+    protected override async Task OnInitializedAsync() => await Recarregar();
+
+    private async Task Recarregar() => _quadro = await Cadastros.ObterAsync(EventosFavoa.Hoje);
+
+    private void Novo(TipoLancamento tipo) { _excluindo = null; _editando = new Edicao { Tipo = tipo }; }
+
+    private void Editar(CategoriaCadastro c)
+    {
+        _excluindo = null;
+        _editando = new Edicao { Id = c.Id, Tipo = c.Tipo, Nome = c.Nome, Limite = Dinheiro.ParaCampo(c.OrcamentoCentavos) };
+    }
+
+    private void Cancelar() { _editando = null; _excluindo = null; }
+
+    private async Task Salvar()
+    {
+        if (_editando is not { } e) return;
+        long? limite = null;
+        if (!string.IsNullOrWhiteSpace(e.Limite))
+        {
+            limite = Texto.LerMoeda(e.Limite);
+            if (limite is null) { e.Erro = "Limite inválido. Ex.: 600 ou 600,00 (deixe vazio para sem limite)."; return; }
+        }
+        var r = await Cadastros.SalvarCategoriaAsync(e.Id, e.Nome, e.Tipo, limite);
+        if (!r.Sucesso) { e.Erro = r.Mensagem; return; }
+        Eventos.MostrarMensagem(r.Mensagem);
+        _editando = null;
+        await Recarregar();
+    }
+
+    private async Task Excluir(CategoriaCadastro c)
+    {
+        var r = await Cadastros.ExcluirCategoriaAsync(c.Id, _moverPara);
+        Eventos.MostrarMensagem(r.Mensagem);
+        if (!r.Sucesso) return;
+        _excluindo = null;
+        await Recarregar();
+    }
+
+    private RenderFragment FormularioCategoria(Edicao e) => @<form class="cadastro__form" @onsubmit="Salvar" @onsubmit:preventDefault>
+        <div class="campo-linha">
+            <div class="campo">
+                <label for="cat-nome">Nome</label>
+                <input id="cat-nome" type="text" autocomplete="off" @bind="e.Nome" @bind:event="oninput" autofocus />
+            </div>
+            @if (e.Tipo == TipoLancamento.Despesa)
+            {
+                <div class="campo cadastro__campo-curto">
+                    <label for="cat-limite">Limite por mês (R$)</label>
+                    <input id="cat-limite" type="text" inputmode="decimal" autocomplete="off" placeholder="Sem limite" @bind="e.Limite" @bind:event="oninput" />
+                </div>
+            }
+        </div>
+        @if (e.Erro is not null) { <p class="cadastro__erro" role="alert">@e.Erro</p> }
+        <div class="cadastro__acoes">
+            <button type="submit" class="botao botao--primario botao--pequeno">Salvar</button>
+            <button type="button" class="botao botao--fantasma botao--pequeno" @onclick="Cancelar">Cancelar</button>
+        </div>
+    </form>;
+
+    private static string Subtitulo(CategoriaCadastro c)
+    {
+        var partes = new List<string>();
+        if (c.OrcamentoCentavos is { } o)
+            partes.Add(c.GastoMesCentavos > o
+                ? $"{Texto.FormatarMoeda(c.GastoMesCentavos)} de {Texto.FormatarMoeda(o)} · passou {Texto.FormatarMoeda(c.GastoMesCentavos - o)}"
+                : $"{Texto.FormatarMoeda(c.GastoMesCentavos)} de {Texto.FormatarMoeda(o)} este mês");
+        else if (c.Tipo == TipoLancamento.Despesa && c.GastoMesCentavos > 0)
+            partes.Add($"{Texto.FormatarMoeda(c.GastoMesCentavos)} este mês");
+        partes.Add(c.Lancamentos == 1 ? "1 lançamento" : $"{c.Lancamentos} lançamentos");
+        return string.Join(" · ", partes);
+    }
+
+    private static string Largura(double f) =>
+        (Math.Clamp(f, 0, 1) * 100).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) + "%";
+}

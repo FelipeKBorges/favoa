@@ -1,0 +1,20 @@
+@inject NavigationManager Nav
+
+@* Alterna entre as três telas do Fitness. Substitui o título da página: a aba ativa já diz onde a pessoa está. *@
+<nav class="abas-fitness" aria-label="Fitness">
+    @foreach (var (chave, rotulo, href) in Itens)
+    {
+        <a class="abas-fitness__aba @(Ativa == chave ? "abas-fitness__aba--ativa" : "")" aria-current="@(Ativa == chave ? "page" : null)" href="@href">@rotulo</a>
+    }
+</nav>
+
+@code {
+    [Parameter, EditorRequired] public string Ativa { get; set; } = "";
+
+    private static readonly (string Chave, string Rotulo, string Href)[] Itens =
+    [
+        ("treino", "Treino", "treino"),
+        ("dieta", "Dieta", "dieta"),
+        ("medidas", "Medidas", "medidas"),
+    ];
+}

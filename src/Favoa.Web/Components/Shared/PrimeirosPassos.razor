@@ -1,0 +1,107 @@
+@using Favoa.Core.Fitness
+@implements IDisposable
+@inject IFitnessServico Fitness
+@inject IFavoaServico Servico
+@inject EventosFavoa Eventos
+@inject IJSRuntime Js
+
+@* Três coisas que fazem o resto do app funcionar (gasto do treino, meta da dieta, ritmo dos gastos).
+   Some sozinha quando tudo está feito, ou se a pessoa dispensar neste aparelho. *@
+@if (_mostrar && _passos.Any(p => !p.Feito))
+{
+    <section class="passos" aria-label="Primeiros passos">
+        @{ var feitos = _passos.Count(p => p.Feito); var proximo = _passos.First(p => !p.Feito); }
+        <div class="passos__topo">
+            <button type="button" class="passos__resumo" aria-expanded="@_aberto" @onclick="() => _aberto = !_aberto">
+                <span class="proxima__titulo">Primeiros passos</span>
+                <span class="dados__meta">@feitos de @_passos.Count@(_aberto ? "" : " · " + proximo.Titulo)</span>
+            </button>
+            @if (_aberto)
+            {
+                <button type="button" class="botao botao--fantasma botao--pequeno" @onclick="Dispensar">Dispensar</button>
+            }
+            else
+            {
+                <a class="botao botao--pequeno" href="@proximo.Href">Continuar</a>
+            }
+        </div>
+        @if (_aberto)
+        {
+            <ol class="passos__lista">
+                @foreach (var p in _passos)
+                {
+                    <li class="passos__item @(p.Feito ? "passos__item--feito" : "")">
+                        <span class="passos__marca" aria-hidden="true">@(p.Feito ? "✓" : "○")</span>
+                        <div class="passos__texto">
+                            <span class="passos__nome">@p.Titulo</span>
+                            <span class="dados__meta">@p.Porque</span>
+                        </div>
+                        @if (!p.Feito)
+                        {
+                            <a class="botao botao--pequeno" href="@p.Href">Abrir</a>
+                        }
+                    </li>
+                }
+            </ol>
+        }
+    </section>
+}
+
+@code {
+    private sealed record Passo(string Titulo, string Porque, string Href, bool Feito);
+
+    private const string Chave = "favoa_passos_dispensados";
+    private bool _mostrar = true;
+    private bool _aberto;
+    private List<Passo> _passos = [];
+    private bool _notificou;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Eventos.RegistroSalvo += Recarregar;
+        await Calcular();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool primeira)
+    {
+        if (!primeira) return;
+        try
+        {
+            if (await Js.InvokeAsync<string?>("localStorage.getItem", Chave) == "1") { _mostrar = false; StateHasChanged(); }
+            // Notificações: o passo conta como feito neste aparelho quando a permissão já foi dada.
+            var ok = await Js.InvokeAsync<bool>("favoa.notificacaoPermitida");
+            if (ok != _notificou) { _notificou = ok; await Calcular(); StateHasChanged(); }
+        }
+        catch { /* sem armazenamento: mostra */ }
+    }
+
+    private async Task Recarregar()
+    {
+        await Calcular();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task Calcular()
+    {
+        var hoje = EventosFavoa.Hoje;
+        var pesos = await Fitness.ObterPesosAsync(3650, hoje);
+        var dia = await Fitness.ObterDiaDietaAsync(hoje);
+        var painel = await Servico.ObterPainelAsync(hoje);
+        _passos =
+        [
+            new("Registre seu peso", "Com ele o Fávoa estima o gasto de cada treino.", "medidas?peso=1", pesos.Atual is not null),
+            new("Defina a meta de calorias", "A barra da Dieta e a meta do dia passam a funcionar.", "dieta?aba=metas", dia.Metas.Kcal > 0),
+            new("Defina o orçamento do mês", "Mostra se o ritmo dos gastos está dentro do combinado.", "financas", painel.Resumo.OrcamentoMensalCentavos > 0),
+            new("Crie um hábito", "Pequeno, como ler 20 min. A colmeia passa a contar a sequência.", "habitos", painel.Resumo.HabitosAtivos > 0),
+            new("Ative as notificações no celular", "Para receber lembretes de refeição, água e treino.", "cadastros?aba=lembretes", _notificou),
+        ];
+    }
+
+    private async Task Dispensar()
+    {
+        _mostrar = false;
+        try { await Js.InvokeVoidAsync("localStorage.setItem", Chave, "1"); } catch { }
+    }
+
+    public void Dispose() => Eventos.RegistroSalvo -= Recarregar;
+}

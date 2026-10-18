@@ -1,0 +1,77 @@
+{
+  "name": "Fávoa",
+  "short_name": "Fávoa",
+  "description": "Seu painel de vida: finanças, tarefas, hábitos, treino e dieta.",
+  "lang": "pt-BR",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#15110C",
+  "theme_color": "#15110C",
+  "icons": [
+    {
+      "src": "/icones/favoa-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icones/favoa-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icones/favoa-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Lançar despesa",
+      "short_name": "Despesa",
+      "url": "/?lancar=despesa",
+      "icons": [
+        {
+          "src": "/icones/favoa-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Bebi água",
+      "short_name": "Água",
+      "url": "/?lancar=agua",
+      "icons": [
+        {
+          "src": "/icones/favoa-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Tarefas",
+      "url": "/tarefas",
+      "icons": [
+        {
+          "src": "/icones/favoa-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Finanças",
+      "url": "/financas",
+      "icons": [
+        {
+          "src": "/icones/favoa-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ]
+}

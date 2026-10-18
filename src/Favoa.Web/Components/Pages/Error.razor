@@ -1,0 +1,25 @@
+@page "/Error"
+@using System.Diagnostics
+
+<PageTitle>Fávoa · Erro</PageTitle>
+
+<main class="inicio">
+    <section class="saudacao">
+        <h1>Algo deu errado.</h1>
+        <p>Seus dados estão salvos no seu computador. Recarregue a página ou reinicie o Fávoa.</p>
+        @if (!string.IsNullOrEmpty(RequestId))
+        {
+            <p>Código do erro: <code>@RequestId</code></p>
+        }
+    </section>
+</main>
+
+@code {
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
+    private string? RequestId { get; set; }
+
+    protected override void OnInitialized() =>
+        RequestId = Activity.Current?.Id ?? HttpContext?.TraceIdentifier;
+}

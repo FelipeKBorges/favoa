@@ -1,0 +1,25 @@
+@using System.Globalization
+@* Anel de progresso (0 a 1) no âmbar da colmeia. Decorativo quando sem texto: o número vai no rótulo de quem o usa. *@
+<svg class="anel" width="@Tamanho" height="@Tamanho" viewBox="0 0 36 36" aria-hidden="true">
+    <circle cx="18" cy="18" r="@F(Raio)" class="anel__trilho" stroke-width="@F(Espessura)" />
+    @if (Valor > 0)
+    {
+        <circle cx="18" cy="18" r="@F(Raio)" class="anel__valor @(Valor >= 0.999 ? "anel__valor--cheio" : "")" stroke-width="@F(Espessura)"
+                stroke-dasharray="@F(Circ * Math.Clamp(Valor, 0, 1)) @F(Circ)" transform="rotate(-90 18 18)" />
+    }
+    @if (Texto is not null)
+    {
+        <SvgTexto X="18" Y="18" Classe="anel__texto" Ancora="middle" Base="central">@Texto</SvgTexto>
+    }
+</svg>
+
+@code {
+    [Parameter] public double Valor { get; set; }
+    [Parameter] public int Tamanho { get; set; } = 22;
+    [Parameter] public string? Texto { get; set; }
+
+    private double Espessura => Tamanho >= 48 ? 3.5 : 4.5;
+    private double Raio => 18 - Espessura / 2 - 0.5;
+    private double Circ => 2 * Math.PI * Raio;
+    private static string F(double v) => v.ToString("0.##", CultureInfo.InvariantCulture);
+}

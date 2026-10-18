@@ -1,0 +1,496 @@
+@using System.Globalization
+@implements IDisposable
+@inject IFavoaServico Servico
+@inject EventosFavoa Eventos
+@inject IJSRuntime JS
+
+@* Tela inicial em calendário: o mês (ou a semana) com o que tem em cada dia, o detalhe do dia escolhido,
+   a linha de progresso e o mapa de constância. Tudo da pessoa que está usando; finanças e tarefas são da casa. *@
+
+<div class="cal">
+    <section class="cal__principal" aria-label="Calendário">
+        <div class="cal__barra">
+            <div class="cal__navegar">
+                <button type="button" class="botao-icone" aria-label="@(Mes ? "Mês anterior" : "Semana anterior")" @onclick="() => Andar(-1)">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6" /></svg>
+                </button>
+                <h2 class="cal__titulo" aria-live="polite">@TituloPeriodo</h2>
+                <button type="button" class="botao-icone" aria-label="@(Mes ? "Próximo mês" : "Próxima semana")" @onclick="() => Andar(1)">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6" /></svg>
+                </button>
+                <button type="button" class="botao botao--fantasma cal__hoje" @onclick="IrParaHoje">Hoje</button>
+            </div>
+            <div class="segmento" role="radiogroup" aria-label="Visão">
+                <button type="button" role="radio" aria-checked="@Mes" class="segmento__opcao @(Mes ? "segmento__opcao--ativa" : "")" @onclick="() => TrocarVisao(VisaoCalendario.Mes)">Mês</button>
+                <button type="button" role="radio" aria-checked="@(!Mes)" class="segmento__opcao @(!Mes ? "segmento__opcao--ativa" : "")" @onclick="() => TrocarVisao(VisaoCalendario.Semana)">Semana</button>
+            </div>
+        </div>
+
+        <div class="segmento cal__filtro" role="radiogroup" aria-label="Mostrar">
+            @foreach (var (topico, rotulo) in Topicos)
+            {
+                <button type="button" role="radio" aria-checked="@(_topico == topico)"
+                        class="segmento__opcao @(_topico == topico ? "segmento__opcao--ativa" : "")"
+                        @onclick="() => _topico = topico">@rotulo</button>
+            }
+        </div>
+
+        @if (_calendario is null)
+        {
+            <p class="carregando">Carregando o calendário…</p>
+        }
+        else
+        {
+            <div class="cal__grade @(Mes ? "cal__grade--mes" : "cal__grade--semana") @(_carregando ? "cal__grade--recarregando" : "")">
+                @foreach (var nome in DiasDaSemana)
+                {
+                    <div class="cal__semana-nome" aria-hidden="true">@nome</div>
+                }
+                @foreach (var dia in _calendario.Dias)
+                {
+                    var d = dia;
+                    var itens = ItensDaCelula(d).ToList();
+                    var fora = Mes && d.Data.Month != _referencia.Month;
+                    <button type="button"
+                            class="cal__dia @(fora ? "cal__dia--fora" : "") @(d.Data == Hoje ? "cal__dia--hoje" : "") @(d.Data == _selecionado ? "cal__dia--selecionado" : "")"
+                            aria-pressed="@(d.Data == _selecionado)" aria-label="@RotuloDia(d, itens.Count)"
+                            @onclick="() => Selecionar(d.Data)">
+                        <span class="cal__dia-topo">
+                            <span class="cal__dia-num">@(Mes ? d.Data.Day : d.Data.ToString("ddd d", PtBr))</span>
+                            @if (d.Progresso is { } p)
+                            {
+                                <Anel Valor="p.Geral" Tamanho="22" />
+                            }
+                        </span>
+                        @if (itens.Count > 0 || ResumoFinanceiro(d) is not null)
+                        {
+                            <span class="cal__itens">
+                                @foreach (var item in itens.Take(Mes ? 2 : 12))
+                                {
+                                    <span class="cal__item cal__item--@Classe(item.Tipo) @(item.Feito && item.Tipo == TipoItemDia.Tarefa ? "cal__item--feito" : "") @(item.Alerta ? "cal__item--alerta" : "")">
+                                        @if (item.Tipo == TipoItemDia.Lembrete) { <span class="cal__hora">@item.Detalhe</span> }
+                                        @item.Texto
+                                    </span>
+                                }
+                                @if (Mes && itens.Count > 2)
+                                {
+                                    <span class="cal__mais">+@(itens.Count - 2)</span>
+                                }
+                                @if (ResumoFinanceiro(d) is { } fin)
+                                {
+                                    <span class="cal__gasto">@fin</span>
+                                }
+                            </span>
+                            <span class="cal__pontos" aria-hidden="true">
+                                @foreach (var tipo in itens.Select(i => i.Tipo).Distinct().Take(4))
+                                {
+                                    <span class="cal__ponto cal__ponto--@Classe(tipo)"></span>
+                                }
+                            </span>
+                        }
+                    </button>
+                }
+            </div>
+        }
+    </section>
+
+    @if (DiaSelecionado is { } sel)
+    {
+        <aside class="cal__detalhe cartao" aria-label="Dia escolhido">
+            <div class="detalhe__topo">
+                <h2>@Capitalizar(sel.Data.ToString("dddd, d 'de' MMMM", PtBr))</h2>
+                @if (sel.Data == Hoje) { <span class="chip">hoje</span> }
+            </div>
+
+            @if (sel.Progresso is { } p)
+            {
+                <div class="detalhe__progresso">
+                    <Anel Valor="p.Geral" Tamanho="64" Texto="@($"{p.Percentual}%")" />
+                    <ul class="detalhe__areas" aria-label="Por área">
+                        @foreach (var (chave, rotulo) in Areas.Skip(1))
+                        {
+                            if (p.Area(chave) is not { } v) continue;
+                            <li>
+                                <span class="detalhe__area-nome">@rotulo</span>
+                                <span class="detalhe__barra"><span style="width:@Math.Round(v * 100)%"></span></span>
+                                <span class="detalhe__area-valor">@Math.Round(v * 100)%</span>
+                            </li>
+                        }
+                    </ul>
+                </div>
+            }
+            else if (sel.Data > Hoje)
+            {
+                <p class="vazio">Dia por vir. Planeje uma tarefa abaixo.</p>
+            }
+            else
+            {
+                <p class="vazio">Sem registros neste dia.</p>
+            }
+
+            @if (sel.AguaMl > 0 || sel.Kcal > 0)
+            {
+                <p class="detalhe__linha">
+                    @if (sel.AguaMl > 0) { <span>Água @Litros(sel.AguaMl)</span> }
+                    @if (sel.Kcal > 0) { <span>@sel.Kcal.ToString("N0", PtBr) kcal</span> }
+                </p>
+            }
+
+            @foreach (var (tipo, titulo) in Grupos)
+            {
+                if (!Mostra(tipo)) continue;
+                var doTipo = sel.Itens.Where(i => i.Tipo == tipo).ToList();
+                if (doTipo.Count == 0) continue;
+                <div class="detalhe__grupo">
+                    <div class="rotulo">@titulo @(tipo == TipoItemDia.Habito ? $"· {doTipo.Count(i => i.Feito)} de {doTipo.Count}" : "")</div>
+                    @switch (tipo)
+                    {
+                        case TipoItemDia.Tarefa:
+                            foreach (var t in doTipo)
+                            {
+                                <div class="tarefa">
+                                    <label class="tarefa__marcar">
+                                        <input type="checkbox" checked="@t.Feito" @onchange="() => AlternarTarefa(t.Id!.Value)" />
+                                        <span class="tarefa__titulo @(t.Feito ? "tarefa__titulo--feita" : "")">@t.Texto</span>
+                                    </label>
+                                    @if (t.Alerta) { <span class="tarefa__prazo tarefa__prazo--atrasada">atrasada</span> }
+                                    else if (t.Detalhe is not null) { <span class="tarefa__prazo">@t.Detalhe</span> }
+                                </div>
+                            }
+                            break;
+                        case TipoItemDia.Habito:
+                            <div class="pilulas">
+                                @foreach (var h in doTipo)
+                                {
+                                    <button type="button" class="pilula @(h.Feito ? "pilula--feita" : "")" aria-pressed="@h.Feito"
+                                            @onclick="() => AlternarHabito(h.Id!.Value, sel.Data)">@h.Texto</button>
+                                }
+                            </div>
+                            break;
+                        case TipoItemDia.Projeto:
+                            foreach (var i in doTipo)
+                            {
+                                <a class="detalhe__item detalhe__item--link" href="@($"projetos/{i.Id}")">
+                                    <span>@i.Texto</span>
+                                    @if (i.Detalhe is not null) { <span class="detalhe__valor">@i.Detalhe</span> }
+                                </a>
+                            }
+                            break;
+                        default:
+                            foreach (var i in doTipo)
+                            {
+                                <div class="detalhe__item">
+                                    <span>@i.Texto</span>
+                                    @if (i.Detalhe is not null) { <span class="detalhe__valor">@i.Detalhe</span> }
+                                </div>
+                            }
+                            if (tipo == TipoItemDia.Lancamento && sel.DespesasCentavos > 0)
+                            {
+                                <div class="detalhe__item detalhe__item--total"><span>Gasto no dia</span><span class="detalhe__valor">@Favoa.Core.Captura.Texto.FormatarMoeda(sel.DespesasCentavos)</span></div>
+                            }
+                            break;
+                    }
+                </div>
+            }
+
+            @if (sel.Data >= Hoje)
+            {
+                <div class="nova nova--compacta">
+                    <label class="so-leitor" for="tarefa-dia">Nova tarefa para @sel.Data.ToString("dd/MM")</label>
+                    <input id="tarefa-dia" type="text" autocomplete="off" placeholder="Tarefa para @(sel.Data == Hoje ? "hoje" : sel.Data.ToString("dd/MM"))"
+                           @bind="_novaTarefa" @bind:event="oninput" @onkeydown="AoTeclar" />
+                    <button type="button" class="botao botao--primario" disabled="@string.IsNullOrWhiteSpace(_novaTarefa)" @onclick="CriarTarefa">Adicionar</button>
+                </div>
+            }
+        </aside>
+    }
+</div>
+
+<section class="progresso cartao" aria-labelledby="titulo-progresso">
+    <div class="progresso__topo">
+        <h2 id="titulo-progresso">Progresso</h2>
+        <div class="segmento" role="radiogroup" aria-label="Período">
+            @foreach (var n in Janelas)
+            {
+                <button type="button" role="radio" aria-checked="@(_janela == n)" class="segmento__opcao @(_janela == n ? "segmento__opcao--ativa" : "")" @onclick="() => _janela = n">@n dias</button>
+            }
+        </div>
+    </div>
+
+    <div class="segmento progresso__areas" role="radiogroup" aria-label="Área">
+        @foreach (var (chave, rotulo) in Areas)
+        {
+            <button type="button" role="radio" aria-checked="@(_area == chave)" class="segmento__opcao @(_area == chave ? "segmento__opcao--ativa" : "")" @onclick="() => _area = chave">@rotulo</button>
+        }
+    </div>
+
+    @if (_progresso is not null)
+    {
+        var janela = Janela;
+        var valores = janela.Select(p => p?.Area(_area)).Where(v => v is not null).Select(v => v!.Value).ToList();
+        <div class="progresso__numeros">
+            <div class="numero">
+                <span class="numero__valor">@(valores.Count == 0 ? "—" : $"{Math.Round(valores.Average() * 100):0}%")</span>
+                <span class="numero__rotulo">média em @_janela dias</span>
+            </div>
+            <div class="numero">
+                <span class="numero__valor">@valores.Count(v => v >= 0.999)</span>
+                <span class="numero__rotulo">dias com @(_area == CelulaColmeia.Hoje ? "a colmeia" : "a célula") cheia</span>
+            </div>
+            <div class="numero">
+                <span class="numero__valor">@Sequencia</span>
+                <span class="numero__rotulo">@(Sequencia == 1 ? "dia seguido" : "dias seguidos") acima de 70%</span>
+            </div>
+        </div>
+
+        @if (valores.Count == 0)
+        {
+            <p class="vazio">Sem registros @(_area == CelulaColmeia.Treino ? "de treino" : "") nesse período. A linha aparece conforme você usa o Fávoa.</p>
+        }
+        else
+        {
+            <GraficoProgresso Dias="janela" Area="@_area" Inicio="Hoje.AddDays(1 - _janela)" Titulo="@Areas.First(a => a.Chave == _area).Rotulo" />
+        }
+
+        <h3 class="progresso__subtitulo">Constância</h3>
+        <MapaConstancia Dias="_progresso" Inicio="_inicioMapa" Hoje="Hoje" Selecionado="_selecionado" AoEscolher="IrPara" />
+    }
+</section>
+
+@code {
+    private enum Topico { Tudo, Tarefas, Financas, Habitos, Corpo, Lembretes, Projetos }
+
+    private static readonly (Topico, string)[] Topicos =
+    [
+        (Topico.Tudo, "Tudo"), (Topico.Tarefas, "Tarefas"), (Topico.Financas, "Finanças"),
+        (Topico.Habitos, "Hábitos"), (Topico.Corpo, "Treino e corpo"), (Topico.Lembretes, "Lembretes"), (Topico.Projetos, "Projetos"),
+    ];
+
+    private static readonly (string Chave, string Rotulo)[] Areas =
+    [
+        (CelulaColmeia.Hoje, "Geral"), (CelulaColmeia.Financas, "Finanças"), (CelulaColmeia.Tarefas, "Tarefas"),
+        (CelulaColmeia.Habitos, "Hábitos"), (CelulaColmeia.Alimentacao, "Alimentação"), (CelulaColmeia.Treino, "Treino"),
+    ];
+
+    private static readonly (TipoItemDia, string)[] Grupos =
+    [
+        (TipoItemDia.Projeto, "Projetos"), (TipoItemDia.Tarefa, "Tarefas"), (TipoItemDia.ContaPrevista, "Contas previstas"), (TipoItemDia.Lembrete, "Lembretes"),
+        (TipoItemDia.Treino, "Treino"), (TipoItemDia.Peso, "Corpo"), (TipoItemDia.Lancamento, "Gastos e receitas"), (TipoItemDia.Habito, "Hábitos"),
+    ];
+
+    private static readonly int[] Janelas = [30, 90];
+    private static readonly string[] DiasDaSemana = ["seg", "ter", "qua", "qui", "sex", "sáb", "dom"];
+    private static readonly CultureInfo PtBr = new("pt-BR");
+
+    /// <summary>Visão salva (Automática, Mês ou Semana). Automática decide pela largura da tela no primeiro desenho.</summary>
+    [Parameter] public VisaoCalendario Visao { get; set; }
+    [Parameter] public EventCallback<VisaoCalendario> AoTrocarVisao { get; set; }
+
+    private static DateOnly Hoje => EventosFavoa.Hoje;
+    private bool Mes => _visao == VisaoCalendario.Mes;
+
+    private VisaoCalendario _visao = VisaoCalendario.Mes;
+    private DateOnly _referencia = Hoje;
+    private DateOnly _selecionado = Hoje;
+    private Topico _topico = Topico.Tudo;
+    private CalendarioPeriodo? _calendario;
+    private bool _carregando;
+    private string? _novaTarefa;
+
+    private IReadOnlyList<ProgressoDia?>? _progresso;
+    private DateOnly _inicioMapa;
+    private int _janela = 30;
+    private string _area = CelulaColmeia.Hoje;
+    private int Sequencia => _progresso is null ? 0 : HistoricoColmeia.Sequencia(_progresso, Hoje);
+
+    private IReadOnlyList<ProgressoDia?> Janela =>
+        _progresso is null ? [] : _progresso.Skip(Math.Max(0, _progresso.Count - _janela)).ToList();
+
+    private DiaCalendario? DiaSelecionado => _calendario?.Dias.FirstOrDefault(d => d.Data == _selecionado);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _visao = Visao == VisaoCalendario.Semana ? VisaoCalendario.Semana : VisaoCalendario.Mes;
+        // Mapa: 26 semanas, começando numa segunda.
+        var ha = Hoje.AddDays(-7 * 25);
+        _inicioMapa = ha.AddDays(-(((int)ha.DayOfWeek + 6) % 7));
+        Eventos.RegistroSalvo += AoSalvar;
+        await Task.WhenAll(CarregarCalendario(), CarregarProgresso());
+    }
+
+    protected override async Task OnAfterRenderAsync(bool primeira)
+    {
+        if (!primeira || Visao != VisaoCalendario.Automatica) return;
+        try
+        {
+            if (await JS.InvokeAsync<bool>("favoa.telaEstreita"))
+            {
+                _visao = VisaoCalendario.Semana;
+                await CarregarCalendario();
+                StateHasChanged();
+            }
+        }
+        catch (JSDisconnectedException) { }
+        catch (InvalidOperationException) { }
+    }
+
+    private (DateOnly Inicio, DateOnly Fim) Periodo()
+    {
+        if (Mes)
+        {
+            var primeiro = new DateOnly(_referencia.Year, _referencia.Month, 1);
+            var inicio = Segunda(primeiro);
+            var ultimo = primeiro.AddMonths(1).AddDays(-1);
+            var fim = Segunda(ultimo).AddDays(6);
+            return (inicio, fim);
+        }
+        var seg = Segunda(_referencia);
+        return (seg, seg.AddDays(6));
+    }
+
+    private static DateOnly Segunda(DateOnly d) => d.AddDays(-(((int)d.DayOfWeek + 6) % 7));
+
+    private string TituloPeriodo
+    {
+        get
+        {
+            if (Mes) return Capitalizar(_referencia.ToString("MMMM 'de' yyyy", PtBr));
+            var (i, f) = Periodo();
+            return i.Month == f.Month
+                ? $"{i.Day} a {f.Day} de {f.ToString("MMMM", PtBr)}"
+                : $"{i.Day} de {i.ToString("MMM", PtBr).TrimEnd('.')} a {f.Day} de {f.ToString("MMM", PtBr).TrimEnd('.')}";
+        }
+    }
+
+    private async Task CarregarCalendario()
+    {
+        var (inicio, fim) = Periodo();
+        _carregando = _calendario is not null;
+        _calendario = await Servico.ObterCalendarioAsync(inicio, fim, Hoje);
+        _carregando = false;
+    }
+
+    private async Task CarregarProgresso() =>
+        _progresso = await Servico.ObterProgressoAsync(_inicioMapa, Hoje, Hoje);
+
+    private async Task AoSalvar()
+    {
+        await Task.WhenAll(CarregarCalendario(), CarregarProgresso());
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task Andar(int passos)
+    {
+        _referencia = Mes ? new DateOnly(_referencia.Year, _referencia.Month, 1).AddMonths(passos) : _referencia.AddDays(7 * passos);
+        // O dia escolhido acompanha: hoje se estiver no período, senão o primeiro dia dele.
+        var (inicio, fim) = Periodo();
+        _selecionado = Hoje >= inicio && Hoje <= fim && (!Mes || Hoje.Month == _referencia.Month) ? Hoje
+            : Mes ? new DateOnly(_referencia.Year, _referencia.Month, 1) : inicio;
+        await CarregarCalendario();
+    }
+
+    private async Task IrParaHoje() => await IrPara(Hoje);
+
+    private async Task IrPara(DateOnly dia)
+    {
+        _referencia = dia;
+        _selecionado = dia;
+        await CarregarCalendario();
+    }
+
+    private async Task Selecionar(DateOnly dia)
+    {
+        _selecionado = dia;
+        _novaTarefa = null;
+        if (Mes && dia.Month != _referencia.Month) await IrPara(dia);
+    }
+
+    private async Task TrocarVisao(VisaoCalendario visao)
+    {
+        if (_visao == visao) return;
+        _visao = visao;
+        _referencia = _selecionado;
+        await CarregarCalendario();
+        await AoTrocarVisao.InvokeAsync(visao);
+    }
+
+    private bool Mostra(TipoItemDia tipo) => _topico switch
+    {
+        Topico.Tudo => true,
+        Topico.Tarefas => tipo == TipoItemDia.Tarefa,
+        Topico.Financas => tipo is TipoItemDia.ContaPrevista or TipoItemDia.Lancamento,
+        Topico.Habitos => tipo == TipoItemDia.Habito,
+        Topico.Corpo => tipo is TipoItemDia.Treino or TipoItemDia.Peso,
+        Topico.Lembretes => tipo == TipoItemDia.Lembrete,
+        Topico.Projetos => tipo == TipoItemDia.Projeto,
+        _ => true,
+    };
+
+    /// <summary>O que cabe no quadrinho do dia. Em "Tudo", hábitos, gastos e lembretes diários ficam no detalhe para não poluir.</summary>
+    private IEnumerable<ItemDia> ItensDaCelula(DiaCalendario d) => d.Itens.Where(i => _topico switch
+    {
+        Topico.Tudo => i.Tipo is TipoItemDia.Projeto or TipoItemDia.Tarefa or TipoItemDia.ContaPrevista or TipoItemDia.Treino or TipoItemDia.Peso
+                       || (!Mes && i.Tipo == TipoItemDia.Lembrete),
+        Topico.Financas => i.Tipo == TipoItemDia.ContaPrevista,
+        Topico.Habitos => i.Tipo == TipoItemDia.Habito && i.Feito,
+        _ => Mostra(i.Tipo),
+    });
+
+    private string? ResumoFinanceiro(DiaCalendario d) =>
+        _topico is Topico.Tudo or Topico.Financas && d.DespesasCentavos > 0
+            ? "− " + Favoa.Core.Captura.Texto.FormatarMoeda(d.DespesasCentavos)
+            : null;
+
+    private static string Classe(TipoItemDia t) => t switch
+    {
+        TipoItemDia.Tarefa => "tarefa",
+        TipoItemDia.ContaPrevista => "conta",
+        TipoItemDia.Lancamento => "lancamento",
+        TipoItemDia.Habito => "habito",
+        TipoItemDia.Treino => "treino",
+        TipoItemDia.Peso => "peso",
+        TipoItemDia.Projeto => "projeto",
+        _ => "lembrete",
+    };
+
+    private string RotuloDia(DiaCalendario d, int itens)
+    {
+        var partes = new List<string> { d.Data.ToString("dddd, d 'de' MMMM", PtBr) };
+        if (d.Data == Hoje) partes.Add("hoje");
+        if (d.Progresso is { } p) partes.Add($"colmeia {p.Percentual}%");
+        if (itens > 0) partes.Add(itens == 1 ? "1 item" : $"{itens} itens");
+        return string.Join(", ", partes);
+    }
+
+    private async Task AlternarTarefa(Guid id)
+    {
+        await Servico.AlternarTarefaAsync(id, Hoje);
+        await Eventos.NotificarRegistroSalvoAsync();
+    }
+
+    private async Task AlternarHabito(Guid id, DateOnly dia)
+    {
+        await Servico.AlternarHabitoAsync(id, dia);
+        await Eventos.NotificarRegistroSalvoAsync();
+    }
+
+    private async Task AoTeclar(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await CriarTarefa();
+    }
+
+    private async Task CriarTarefa()
+    {
+        if (string.IsNullOrWhiteSpace(_novaTarefa)) return;
+        var r = await Servico.CriarTarefaAsync(_novaTarefa, _selecionado);
+        Eventos.MostrarMensagem(r.Mensagem, r.Criado);
+        if (!r.Sucesso) return;
+        _novaTarefa = null;
+        await Eventos.NotificarRegistroSalvoAsync();
+    }
+
+    private static string Litros(int ml) => ml < 1000 ? $"{ml} ml" : $"{ml / 1000.0:0.#} L".Replace('.', ',');
+    private static string Capitalizar(string s) => s.Length == 0 ? s : char.ToUpper(s[0], PtBr) + s[1..];
+
+    public void Dispose() => Eventos.RegistroSalvo -= AoSalvar;
+}

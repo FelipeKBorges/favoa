@@ -1,0 +1,218 @@
+@using System.Globalization
+@using Favoa.Core.Fitness
+@inject IFitnessServico Fitness
+@inject IAlimentosOnline Online
+
+<div class="busca-alimento">
+    @if (_escolhido is null)
+    {
+        <div class="busca">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
+            <label class="so-leitor" for="@_id">Buscar alimento</label>
+            <input id="@_id" type="search" autocomplete="off" placeholder="@Placeholder" value="@_texto" @oninput="AoDigitar" @onkeydown="AoTeclar" />
+        </div>
+        @if (Recentes.Count > 0 && _texto.Trim().Length == 0)
+        {
+            <div class="busca-alimento__recentes" role="group" aria-label="Alimentos que você mais lança">
+                <span class="dados__meta">Mais usados</span>
+                <div class="pilulas">
+                    @foreach (var rec in Recentes)
+                    {
+                        var r = rec;
+                        <button type="button" class="pilula" @onclick="() => EscolherRecente(r)">@r.Alimento.Nome · @r.Gramas g</button>
+                    }
+                </div>
+            </div>
+        }
+        @if (_resultados.Count > 0)
+        {
+            <ul class="busca-alimento__resultados" role="listbox" aria-label="Alimentos encontrados">
+                @foreach (var (a, i) in _resultados.Select((a, i) => (a, i)))
+                {
+                    <li role="option" aria-selected="@(i == _destaque)">
+                        <button type="button" class="busca-alimento__opcao @(i == _destaque ? "busca-alimento__opcao--destaque" : "")" @onclick="() => Escolher(a)">
+                            <span class="busca-alimento__nome">@a.Nome</span>
+                            <span class="busca-alimento__info">@a.Kcal.ToString("0") kcal · P @a.Proteina.ToString("0.#", PtBr) g / 100 g@(a.Fonte.Length > 0 ? $" · {Rotulo(a)}" : "")</span>
+                        </button>
+                    </li>
+                }
+            </ul>
+        }
+        else if (_texto.Trim().Length >= 2 && !_buscando && _online is null)
+        {
+            <p class="vazio">Nada na base do Fávoa.</p>
+        }
+
+        @if (_texto.Trim().Length >= 2 && !_buscando)
+        {
+            @if (_online is null)
+            {
+                <button type="button" class="botao botao--fantasma botao--pequeno busca-alimento__online" disabled="@_buscandoOnline" @onclick="BuscarOnline">
+                    @(_buscandoOnline ? "Buscando na internet…" : "Buscar produtos com marca (internet)")
+                </button>
+            }
+            else if (!_online.Sucesso)
+            {
+                <p class="captura__aviso">@_online.Erro</p>
+            }
+            else if (_online.Produtos.Count == 0)
+            {
+                <p class="vazio">Nenhum produto com marca e tabela nutricional completa para “@_texto.Trim()”. Cadastre em Alimentos.</p>
+            }
+            else
+            {
+                <ul class="busca-alimento__resultados" role="listbox" aria-label="Produtos com marca">
+                    @foreach (var p in _online.Produtos)
+                    {
+                        <li role="option" aria-selected="false">
+                            <button type="button" class="busca-alimento__opcao" disabled="@_salvandoOnline" @onclick="() => EscolherOnline(p)">
+                                <span class="busca-alimento__nome">@p.Nome@(p.Marca is null ? "" : $" · {p.Marca}")</span>
+                                <span class="busca-alimento__info">@p.Kcal.ToString("0") kcal · P @p.Proteina.ToString("0.#", PtBr) g / 100 g</span>
+                            </button>
+                        </li>
+                    }
+                </ul>
+                <p class="dados__meta">Produtos: Open Food Facts (openfoodfacts.org), base colaborativa sob licença ODbL. Confira com o rótulo.</p>
+            }
+        }
+    }
+    else
+    {
+        <div class="busca-alimento__escolhido">
+            <span class="chip">@_escolhido.Nome</span>
+            <label class="mini">
+                <span>Quantidade</span>
+                <input id="@($"{_id}-g")" type="number" min="0" step="any" inputmode="decimal" @bind="_qtd" @bind:event="oninput" @onkeydown="AoTeclarGramas" />
+            </label>
+            <label class="mini">
+                <span>Unidade</span>
+                <select class="seletor" aria-label="Unidade" @onchange="AoMudarUnidade">
+                    <option value="g" selected="@(_unidade == "g")">g</option>
+                    <option value="ml" selected="@(_unidade == "ml")">ml</option>
+                    @if (_escolhido.GramasPorcao is { } gp)
+                    {
+                        <option value="porcao" selected="@(_unidade == "porcao")">@(string.IsNullOrWhiteSpace(_escolhido.NomePorcao) ? "porção" : _escolhido.NomePorcao) (@gp g)</option>
+                    }
+                </select>
+            </label>
+            <span class="busca-alimento__kcal">@(_unidade != "g" && Gramas is { } eq ? $"= {eq} g · " : "")@Kcal kcal</span>
+            <button type="button" class="botao botao--primario botao--pequeno" disabled="@(Gramas is null)" @onclick="Confirmar">@TextoBotao</button>
+            <button type="button" class="botao botao--fantasma botao--pequeno" @onclick="Limpar">Trocar</button>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string Placeholder { get; set; } = "Buscar alimento (ex.: arroz, frango, banana)";
+    [Parameter] public string TextoBotao { get; set; } = "Adicionar";
+    [Parameter] public EventCallback<(AlimentoResumo Alimento, int Gramas)> AoEscolher { get; set; }
+    /// <summary>Alimentos que a pessoa mais lança, para escolher com um toque (já vem com a última quantidade).</summary>
+    [Parameter] public IReadOnlyList<AlimentoRecente> Recentes { get; set; } = [];
+
+    private void EscolherRecente(AlimentoRecente r)
+    {
+        Escolher(r.Alimento);
+        _unidade = "g";
+        _qtd = r.Gramas;
+    }
+
+    private static readonly CultureInfo PtBr = new("pt-BR");
+    private readonly string _id = $"alim-{Guid.NewGuid():N}"[..14];
+
+    private string _texto = "";
+    private List<AlimentoResumo> _resultados = [];
+    private AlimentoResumo? _escolhido;
+    private double? _qtd;
+    private string _unidade = "g";
+
+    /// <summary>Gramas equivalentes: ml conta 1 para 1 (densidade da água) e a porção usa os gramas dela.</summary>
+    private double Fator => _unidade == "porcao" && _escolhido?.GramasPorcao is { } gp ? gp : 1;
+    private int? Gramas => _qtd is > 0 ? (int)Math.Max(1, Math.Round(_qtd.Value * Fator)) : null;
+    private int _destaque;
+    private int _versao;
+    private bool _buscando;
+    private ResultadoBuscaOnline? _online;
+    private bool _buscandoOnline;
+    private bool _salvandoOnline;
+
+    private static string Rotulo(AlimentoResumo a) => a.Marca is null ? a.Fonte : $"{a.Marca} ({a.Fonte})";
+
+    private async Task BuscarOnline()
+    {
+        var versao = _versao;
+        _buscandoOnline = true;
+        try
+        {
+            var r = await Online.BuscarAsync(_texto);
+            if (versao == _versao) _online = r;
+        }
+        finally { _buscandoOnline = false; }
+    }
+
+    private async Task EscolherOnline(ProdutoOnline p)
+    {
+        _salvandoOnline = true;
+        try { Escolher(await Fitness.SalvarProdutoOnlineAsync(p)); }
+        finally { _salvandoOnline = false; }
+    }
+
+    private string Kcal => _escolhido is null || Gramas is not { } g ? "0" : (_escolhido.Kcal * g / 100).ToString("0");
+
+    private async Task AoDigitar(ChangeEventArgs e)
+    {
+        _texto = e.Value?.ToString() ?? "";
+        _online = null;
+        var versao = ++_versao;
+        _buscando = true;
+        await Task.Delay(150);
+        if (versao != _versao) return;
+        _resultados = _texto.Trim().Length < 2 ? [] : (await Fitness.BuscarAlimentosAsync(_texto, 8)).ToList();
+        _destaque = 0;
+        _buscando = false;
+    }
+
+    private void AoTeclar(KeyboardEventArgs e)
+    {
+        if (_resultados.Count == 0) return;
+        if (e.Key == "ArrowDown") _destaque = Math.Min(_destaque + 1, _resultados.Count - 1);
+        else if (e.Key == "ArrowUp") _destaque = Math.Max(_destaque - 1, 0);
+        else if (e.Key == "Enter") Escolher(_resultados[_destaque]);
+    }
+
+    private void Escolher(AlimentoResumo a)
+    {
+        _escolhido = a;
+        _unidade = a.GramasPorcao is null ? "g" : "porcao";
+        _qtd = a.GramasPorcao is null ? 100 : 1;
+    }
+
+    private void AoMudarUnidade(ChangeEventArgs e)
+    {
+        var g = Gramas;
+        _unidade = e.Value?.ToString() ?? "g";
+        if (g is { } gramas) _qtd = Math.Round(gramas / Fator, 2);
+    }
+
+    private async Task AoTeclarGramas(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await Confirmar();
+        else if (e.Key == "Escape") Limpar();
+    }
+
+    private async Task Confirmar()
+    {
+        if (_escolhido is null || Gramas is not { } gramas) return;
+        await AoEscolher.InvokeAsync((_escolhido, gramas));
+        Limpar();
+    }
+
+    private void Limpar()
+    {
+        _escolhido = null;
+        _qtd = null;
+        _unidade = "g";
+        _texto = "";
+        _resultados = [];
+        _online = null;
+    }
+}

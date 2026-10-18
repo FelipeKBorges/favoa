@@ -1,0 +1,371 @@
+@using Favoa.Core.Rotina
+@inject ILembretesServico Lembretes
+@inject EventosFavoa Eventos
+@inject IJSRuntime JS
+@implements IDisposable
+
+@if (_quadro is null)
+{
+    <p class="carregando">Carregando…</p>
+}
+else
+{
+    <div class="cadastros__colunas">
+        <section class="cartao cadastro" aria-labelledby="lem-titulo">
+            <div class="cadastro__topo">
+                <h2 id="lem-titulo">Lembretes</h2>
+                <button type="button" class="botao botao--fantasma botao--pequeno" @onclick="Novo">+ Novo</button>
+            </div>
+
+            @if (_editando is { Id: null } novo) { @Formulario(novo) }
+            else
+            {
+                <div class="lembrete-sugestoes" role="group" aria-label="Sugestões de lembrete">
+                    <span class="dados__meta">Sugestões (toque para ajustar e salvar)</span>
+                    <div class="pilulas">
+                        @foreach (var sg in Sugestoes)
+                        {
+                            var s = sg;
+                            <button type="button" class="pilula" @onclick="() => UsarSugestao(s)">@s.Titulo · @s.Hora.ToString("HH:mm")</button>
+                        }
+                    </div>
+                </div>
+            }
+
+            @if (_quadro.Lembretes.Count == 0 && _editando is null)
+            {
+                <p class="vazio">Nenhum ainda. Ideias: <em>Beber água</em> às 10h e 15h, <em>Hora do treino</em> nos dias úteis, <em>Tarefas de hoje</em> às 8h.</p>
+            }
+
+            <ul class="cadastro__lista">
+                @foreach (var l in _quadro.Lembretes)
+                {
+                    <li class="cadastro__item @(l.Ativo ? "" : "cadastro__item--arquivado")">
+                        @if (_editando is { } e && e.Id == l.Id)
+                        {
+                            @Formulario(e)
+                        }
+                        else if (_excluindo == l.Id)
+                        {
+                            <div class="cadastro__confirmar">
+                                <span>Excluir <strong>@l.Titulo</strong>?</span>
+                                <div class="cadastro__acoes">
+                                    <button type="button" class="botao botao--perigo botao--pequeno" @onclick="() => Excluir(l)">Excluir</button>
+                                    <button type="button" class="botao botao--fantasma botao--pequeno" @onclick="Cancelar">Cancelar</button>
+                                </div>
+                            </div>
+                        }
+                        else
+                        {
+                            <span class="lembrete__hora">@l.Hora.ToString("HH:mm")</span>
+                            <div class="cadastro__texto">
+                                <span class="cadastro__nome">@l.Titulo</span>
+                                <span class="cadastro__sub">@AgendaLembretes.DescreverDias(l.Dias)@(l.Tipo == TipoLembrete.Tarefas ? " · lista as tarefas de hoje e atrasadas" : "")@(l.Proximo is { } px ? $" · próximo {LembretesQuando(px)}" : "")</span>
+                                @if (l.UltimoResultado is { } res)
+                                {
+                                    <span class="cadastro__sub @(res.StartsWith("Enviado") ? "" : "cadastro__sub--alerta")">Último: @l.UltimoEnvio?.ToString("dd/MM HH:mm") · @res</span>
+                                }
+                            </div>
+                            <div class="cadastro__acoes">
+                                <button type="button" class="botao botao--fantasma botao--pequeno" disabled="@_enviando" @onclick="() => Testar(l)">Testar</button>
+                                <label class="interruptor" title="@(l.Ativo ? "Desligar" : "Ligar")">
+                                    <input type="checkbox" role="switch" checked="@l.Ativo" aria-label="@($"{l.Titulo} ligado")" @onchange="() => Ativar(l, !l.Ativo)" />
+                                    <span aria-hidden="true"></span>
+                                </label>
+                                <button type="button" class="botao-icone" aria-label="Editar @l.Titulo" @onclick="() => Editar(l)">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z" /></svg>
+                                </button>
+                                <button type="button" class="botao-icone" aria-label="Excluir @l.Titulo" @onclick="() => { _excluindo = l.Id; _editando = null; }">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12" /></svg>
+                                </button>
+                            </div>
+                        }
+                    </li>
+                }
+            </ul>
+
+            <h3 class="rotulo cadastro__subtitulo" id="avisos-tarefas">Próximos avisos de tarefas</h3>
+            @if (_quadro.AvisosTarefas.Count == 0)
+            {
+                <p class="vazio">Nenhum. Numa tarefa, escolha um horário e o lembrete (ex.: 30 min antes) em Tarefas.</p>
+            }
+            else
+            {
+                <ul class="cadastro__lista" aria-labelledby="avisos-tarefas">
+                    @foreach (var a in _quadro.AvisosTarefas)
+                    {
+                        var aviso = a;
+                        <li class="cadastro__item">
+                            <span class="lembrete__hora">@a.Quando.ToString("HH:mm")</span>
+                            <div class="cadastro__texto">
+                                <span class="cadastro__nome">@a.Titulo</span>
+                                <span class="cadastro__sub">Avisa @LembretesQuando(a.Quando) · tarefa às @a.HoraTarefa.ToString("HH:mm") (@AvisoTarefa.Rotulo(a.AvisoMinutos).ToLowerInvariant()) · para @a.Para</span>
+                            </div>
+                            <div class="cadastro__acoes">
+                                <button type="button" class="botao-icone" aria-label="Editar tarefa @a.Titulo"
+                                        @onclick="() => Eventos.SolicitarEdicao(new Favoa.Core.Edicao.ReferenciaRegistro(Favoa.Core.Edicao.TipoReferencia.Tarefa, aviso.TarefaId))">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z" /></svg>
+                                </button>
+                            </div>
+                        </li>
+                    }
+                </ul>
+            }
+        </section>
+
+        <section class="cartao cadastro cadastro--lateral" aria-labelledby="notif-titulo">
+            <h2 id="notif-titulo">Notificações</h2>
+            @switch (_estado)
+            {
+                case "carregando":
+                    <p class="cadastro__dica">Verificando este aparelho…</p>
+                    break;
+                case "inseguro":
+                    <p class="cadastro__dica">Notificações só funcionam no endereço com HTTPS (o do Tailscale, <strong>https://….ts.net</strong>) ou no próprio PC (localhost).</p>
+                    break;
+                case "ios-instalar":
+                    <p class="cadastro__dica">No iPhone, as notificações só funcionam com o Fávoa instalado: no Safari, toque em <strong>Compartilhar → Adicionar à Tela de Início</strong>, abra o Fávoa pelo ícone e volte aqui.</p>
+                    break;
+                case "sem-suporte":
+                    <p class="cadastro__dica">Este navegador não recebe notificações. No Android use o Chrome; no iPhone, o Fávoa instalado na tela de início.</p>
+                    break;
+                case "negado":
+                    <p class="cadastro__dica">As notificações foram bloqueadas para o Fávoa neste aparelho. Libere nas configurações do navegador (ou do iPhone, em Notificações → Fávoa) e tente de novo.</p>
+                    <button type="button" class="botao botao--primario" @onclick="Ativar">Tentar de novo</button>
+                    break;
+                case "ativo":
+                    <p class="cadastro__ok">Este aparelho recebe os lembretes.</p>
+                    <div class="cadastro__acoes">
+                        <button type="button" class="botao botao--primario botao--pequeno" disabled="@_enviando" @onclick="Testar">Enviar teste</button>
+                        <button type="button" class="botao botao--fantasma botao--pequeno" @onclick="Desativar">Desativar aqui</button>
+                    </div>
+                    break;
+                default:
+                    <p class="cadastro__dica">Ative em cada aparelho onde quer receber os avisos (celular, PC). O PC precisa estar ligado na hora do lembrete.</p>
+                    <button type="button" class="botao botao--primario" @onclick="Ativar">Ativar neste aparelho</button>
+                    break;
+            }
+
+            @if (_quadro.Aparelhos.Count > 0)
+            {
+                <h3 class="rotulo cadastro__subtitulo">Aparelhos que recebem</h3>
+                <ul class="cadastro__lista">
+                    @foreach (var a in _quadro.Aparelhos)
+                    {
+                        <li class="cadastro__item">
+                            <div class="cadastro__texto">
+                                <span class="cadastro__nome">@a.Aparelho</span>
+                                <span class="cadastro__sub">desde @a.CriadoEm.ToLocalTime().ToString("dd/MM/yyyy")</span>
+                            </div>
+                            <button type="button" class="botao-icone" aria-label="Parar de enviar para @a.Aparelho" @onclick="() => Remover(a)">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+                            </button>
+                        </li>
+                    }
+                </ul>
+            }
+        </section>
+    </div>
+}
+
+@code {
+    private sealed class Edicao
+    {
+        public Guid? Id { get; init; }
+        public TipoLembrete Tipo { get; set; }
+        public string Titulo { get; set; } = "";
+        public TimeOnly Hora { get; set; } = new(9, 0);
+        public DiasSemana Dias { get; set; } = DiasSemana.Todos;
+        public string? Erro { get; set; }
+    }
+
+    private sealed record EstadoPush(string Estado, string? Endpoint);
+    private sealed record ResultadoPush(string? Erro, string? Endpoint, string? P256dh, string? Auth, string? Aparelho);
+
+    private sealed record Sugestao(string Titulo, TimeOnly Hora, DiasSemana Dias);
+
+    private static readonly Sugestao[] Sugestoes =
+    [
+        new("Registrar o almoço", new(13, 30), DiasSemana.Todos),
+        new("Registrar o jantar", new(21, 0), DiasSemana.Todos),
+        new("Beber água", new(15, 0), DiasSemana.Todos),
+        new("Hora do treino", new(18, 0), DiasSemana.Uteis),
+        new("Fechar o dia no Fávoa", new(21, 30), DiasSemana.Todos),
+    ];
+
+    private void UsarSugestao(Sugestao s)
+    {
+        _excluindo = null;
+        _editando = new Edicao { Tipo = TipoLembrete.Livre, Titulo = s.Titulo, Hora = s.Hora, Dias = s.Dias };
+    }
+
+    private QuadroLembretes? _quadro;
+    private Edicao? _editando;
+    private Guid? _excluindo;
+    private string _estado = "carregando";
+    private string? _endpoint;
+    private bool _enviando;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Eventos.RegistroSalvo += AoSalvarRegistro; // editou uma tarefa por aqui: a lista de avisos muda
+        _quadro = await Lembretes.ObterAsync();
+    }
+
+    private async Task AoSalvarRegistro()
+    {
+        _quadro = await Lembretes.ObterAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose() => Eventos.RegistroSalvo -= AoSalvarRegistro;
+
+    protected override async Task OnAfterRenderAsync(bool primeira)
+    {
+        if (!primeira) return;
+        await AtualizarEstado();
+        StateHasChanged();
+    }
+
+    private async Task AtualizarEstado()
+    {
+        var e = await JS.InvokeAsync<EstadoPush>("favoa.push.estado");
+        _endpoint = e.Endpoint;
+        // Inscrito no navegador mas não conhecido pelo Fávoa (ex.: dados importados): trata como inativo.
+        _estado = e.Estado == "ativo" && _endpoint is not null && _quadro is { Aparelhos.Count: 0 } ? "inativo" : e.Estado;
+    }
+
+    private async Task Recarregar() => _quadro = await Lembretes.ObterAsync();
+
+    private void Novo() { _excluindo = null; _editando = new Edicao(); }
+    private void Cancelar() { _editando = null; _excluindo = null; }
+
+    private void Editar(LembreteCadastro l)
+    {
+        _excluindo = null;
+        _editando = new Edicao { Id = l.Id, Tipo = l.Tipo, Titulo = l.Titulo, Hora = l.Hora, Dias = l.Dias };
+    }
+
+    private async Task Salvar()
+    {
+        if (_editando is not { } e) return;
+        var r = await Lembretes.SalvarAsync(new DadosLembrete(e.Id, e.Titulo, e.Tipo, e.Hora, e.Dias));
+        if (!r.Sucesso) { e.Erro = r.Mensagem; return; }
+        Eventos.MostrarMensagem(r.Mensagem);
+        _editando = null;
+        await Recarregar();
+    }
+
+    private async Task Ativar(LembreteCadastro l, bool ativo)
+    {
+        var r = await Lembretes.DefinirAtivoAsync(l.Id, ativo);
+        Eventos.MostrarMensagem(r.Mensagem);
+        await Recarregar();
+    }
+
+    private async Task Excluir(LembreteCadastro l)
+    {
+        var r = await Lembretes.ExcluirAsync(l.Id);
+        Eventos.MostrarMensagem(r.Mensagem);
+        _excluindo = null;
+        await Recarregar();
+    }
+
+    private async Task Ativar()
+    {
+        var r = await JS.InvokeAsync<ResultadoPush>("favoa.push.ativar", _quadro!.ChavePublica);
+        if (r.Erro is not null)
+        {
+            Eventos.MostrarMensagem(r.Erro);
+            await AtualizarEstado();
+            return;
+        }
+        var res = await Lembretes.InscreverAparelhoAsync(new InscricaoPush(r.Endpoint!, r.P256dh!, r.Auth!, r.Aparelho));
+        Eventos.MostrarMensagem(res.Mensagem);
+        await Recarregar();
+        await AtualizarEstado();
+    }
+
+    private async Task Desativar()
+    {
+        var endpoint = await JS.InvokeAsync<string?>("favoa.push.desativar");
+        if (endpoint is not null) await Lembretes.RemoverAparelhoPorEndpointAsync(endpoint);
+        Eventos.MostrarMensagem("Este aparelho não recebe mais notificações.");
+        await Recarregar();
+        await AtualizarEstado();
+    }
+
+    private async Task Remover(AparelhoPush a)
+    {
+        var r = await Lembretes.RemoverAparelhoAsync(a.Id);
+        Eventos.MostrarMensagem(r.Mensagem);
+        await Recarregar();
+        await AtualizarEstado();
+    }
+
+    private async Task Testar()
+    {
+        _enviando = true;
+        try
+        {
+            var r = await Lembretes.EnviarTesteAsync();
+            Eventos.MostrarMensagem(r.Mensagem);
+            await Recarregar();
+        }
+        finally { _enviando = false; }
+    }
+
+    private static string LembretesQuando(DateTime quando) => AgendaLembretes.Quando(quando, DateTime.Now);
+
+    private async Task Testar(LembreteCadastro l)
+    {
+        _enviando = true;
+        try
+        {
+            var r = await Lembretes.EnviarAgoraAsync(l.Id);
+            Eventos.MostrarMensagem(r.Mensagem);
+            await Recarregar();
+        }
+        finally { _enviando = false; }
+    }
+
+    private static void AlternarDia(Edicao e, DiasSemana dia) => e.Dias = e.Dias.HasFlag(dia) ? e.Dias & ~dia : e.Dias | dia;
+
+    private RenderFragment Formulario(Edicao e) => @<form class="cadastro__form" @onsubmit="Salvar" @onsubmit:preventDefault>
+        <div class="segmento" role="radiogroup" aria-label="Tipo de lembrete">
+            <button type="button" role="radio" aria-checked="@(e.Tipo == TipoLembrete.Livre)"
+                    class="segmento__opcao @(e.Tipo == TipoLembrete.Livre ? "segmento__opcao--ativa" : "")" @onclick="() => e.Tipo = TipoLembrete.Livre">Texto livre</button>
+            <button type="button" role="radio" aria-checked="@(e.Tipo == TipoLembrete.Tarefas)"
+                    class="segmento__opcao @(e.Tipo == TipoLembrete.Tarefas ? "segmento__opcao--ativa" : "")" @onclick="() => e.Tipo = TipoLembrete.Tarefas">Tarefas de hoje</button>
+        </div>
+        <div class="campo-linha">
+            <div class="campo">
+                <label for="lem-titulo">@(e.Tipo == TipoLembrete.Tarefas ? "Título (opcional)" : "O que lembrar")</label>
+                <input id="lem-titulo" type="text" autocomplete="off" placeholder="@(e.Tipo == TipoLembrete.Tarefas ? "Tarefas de hoje" : "Ex.: Beber água")"
+                       @bind="e.Titulo" @bind:event="oninput" />
+            </div>
+            <div class="campo cadastro__campo-dia">
+                <label for="lem-hora">Hora</label>
+                <input id="lem-hora" type="time" @bind="e.Hora" />
+            </div>
+        </div>
+        <fieldset class="cadastro__dias">
+            <legend>Dias</legend>
+            <div class="chips">
+                @foreach (var (dia, curto) in AgendaLembretes.Nomes)
+                {
+                    var ativo = e.Dias.HasFlag(dia);
+                    <button type="button" class="chip-botao @(ativo ? "chip-botao--ativo" : "")" aria-pressed="@ativo" @onclick="() => AlternarDia(e, dia)">@curto</button>
+                }
+                <button type="button" class="chip-botao chip-botao--atalho" @onclick="() => e.Dias = DiasSemana.Todos">Todos</button>
+                <button type="button" class="chip-botao chip-botao--atalho" @onclick="() => e.Dias = DiasSemana.Uteis">Úteis</button>
+            </div>
+        </fieldset>
+        @if (e.Tipo == TipoLembrete.Tarefas) { <p class="cadastro__dica">O aviso lista as tarefas de hoje e as atrasadas (ou diz que não há nenhuma).</p> }
+        @if (e.Erro is not null) { <p class="cadastro__erro" role="alert">@e.Erro</p> }
+        <div class="cadastro__acoes">
+            <button type="submit" class="botao botao--primario botao--pequeno">Salvar</button>
+            <button type="button" class="botao botao--fantasma botao--pequeno" @onclick="Cancelar">Cancelar</button>
+        </div>
+    </form>;
+}

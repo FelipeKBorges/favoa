@@ -1,0 +1,105 @@
+@using Favoa.Core.Pessoas
+@using Favoa.Core.Rotina
+
+@* Dia, horário, aviso antes e quem faz. Usado na tela de Tarefas (detalhes) e na edição. *@
+<div class="campos-tarefa">
+    <div class="campo-linha">
+        <div class="campo">
+            <label for="@($"{Id}-dia")">Dia</label>
+            <input id="@($"{Id}-dia")" type="date" value="@Prazo?.ToString("yyyy-MM-dd")" @onchange="AoMudarDia" />
+        </div>
+        <div class="campo">
+            <label for="@($"{Id}-hora")">Horário</label>
+            <input id="@($"{Id}-hora")" type="time" step="300" value="@Hora?.ToString("HH:mm")" @onchange="AoMudarHora" />
+        </div>
+    </div>
+
+    <div class="campo">
+        <label for="@($"{Id}-aviso")">Lembrete no celular</label>
+        <select id="@($"{Id}-aviso")" class="seletor" disabled="@(Hora is null)" @onchange="AoMudarAviso">
+            <option value="" selected="@(AvisoMinutos is null)">Sem lembrete</option>
+            @foreach (var m in OpcoesAviso)
+            {
+                <option value="@m" selected="@(AvisoMinutos == m)">@AvisoTarefa.Rotulo(m)</option>
+            }
+        </select>
+        @if (Hora is null)
+        {
+            <p class="dados__dica">Escolha um horário para ligar o lembrete.</p>
+        }
+        else if (AvisoMinutos is not null)
+        {
+            <p class="dados__dica">Vai para o celular de @(Responsaveis.Count == 0 ? "todos da casa" : "quem faz") (com notificações ativadas).</p>
+        }
+    </div>
+
+    @if (Pessoas.Count > 1)
+    {
+        <div class="campo">
+            <span class="campo__rotulo" id="@($"{Id}-quem")">Quem faz</span>
+            <div class="campos-tarefa__pessoas" role="group" aria-labelledby="@($"{Id}-quem")">
+                <button type="button" class="chip-botao @(Responsaveis.Count == 0 ? "chip-botao--ativo" : "")" aria-pressed="@(Responsaveis.Count == 0)"
+                        @onclick="Casa">A casa</button>
+                @foreach (var p in Pessoas)
+                {
+                    var pessoa = p;
+                    var marcada = Responsaveis.Contains(pessoa.Id);
+                    <button type="button" class="chip-botao campos-tarefa__pessoa @(marcada ? "chip-botao--ativo" : "")" aria-pressed="@marcada"
+                            @onclick="() => Alternar(pessoa.Id)">
+                        <span class="avatar avatar--mini" style="--cor-pessoa: @pessoa.Cor" aria-hidden="true">@pessoa.Inicial</span>
+                        @pessoa.Nome
+                    </button>
+                }
+            </div>
+            <p class="dados__dica">Marque uma ou mais pessoas; "A casa" é de todos.</p>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Id { get; set; } = "tarefa";
+    [Parameter] public DateOnly? Prazo { get; set; }
+    [Parameter] public EventCallback<DateOnly?> PrazoChanged { get; set; }
+    [Parameter] public TimeOnly? Hora { get; set; }
+    [Parameter] public EventCallback<TimeOnly?> HoraChanged { get; set; }
+    [Parameter] public int? AvisoMinutos { get; set; }
+    [Parameter] public EventCallback<int?> AvisoMinutosChanged { get; set; }
+    [Parameter] public IReadOnlyList<Guid> Responsaveis { get; set; } = [];
+    [Parameter] public EventCallback<IReadOnlyList<Guid>> ResponsaveisChanged { get; set; }
+    [Parameter] public IReadOnlyList<PessoaOpcao> Pessoas { get; set; } = [];
+
+    /// <summary>As opções de sempre, mais a que veio da frase se for diferente (ex.: 45 min).</summary>
+    private IEnumerable<int> OpcoesAviso =>
+        AvisoMinutos is { } a && !AvisoTarefa.Opcoes.Contains(a) ? AvisoTarefa.Opcoes.Append(a).Order() : AvisoTarefa.Opcoes;
+
+    private async Task AoMudarDia(ChangeEventArgs e)
+    {
+        DateOnly? dia = DateOnly.TryParse(e.Value?.ToString(), System.Globalization.CultureInfo.InvariantCulture, out var d) ? d : null;
+        await PrazoChanged.InvokeAsync(dia);
+        if (dia is null && Hora is not null)
+        {
+            // Sem dia não tem horário nem lembrete.
+            await HoraChanged.InvokeAsync(null);
+            await AvisoMinutosChanged.InvokeAsync(null);
+        }
+    }
+
+    private async Task AoMudarHora(ChangeEventArgs e)
+    {
+        TimeOnly? hora = TimeOnly.TryParse(e.Value?.ToString(), System.Globalization.CultureInfo.InvariantCulture, out var h) ? h : null;
+        await HoraChanged.InvokeAsync(hora);
+        if (hora is not null && Prazo is null) await PrazoChanged.InvokeAsync(EventosFavoa.Hoje); // horário sem dia = hoje
+        if (hora is null && AvisoMinutos is not null) await AvisoMinutosChanged.InvokeAsync(null);
+    }
+
+    private Task AoMudarAviso(ChangeEventArgs e) =>
+        AvisoMinutosChanged.InvokeAsync(int.TryParse(e.Value?.ToString(), out var m) ? m : null);
+
+    private Task Casa() => ResponsaveisChanged.InvokeAsync([]);
+
+    private Task Alternar(Guid id)
+    {
+        var lista = Responsaveis.Contains(id) ? Responsaveis.Where(x => x != id).ToList() : Responsaveis.Append(id).ToList();
+        return ResponsaveisChanged.InvokeAsync(lista);
+    }
+}

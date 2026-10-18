@@ -1,0 +1,219 @@
+@inject IFavoaServico Servico
+@inject EventosFavoa Eventos
+@inject IJSRuntime JS
+@inject Favoa.Core.Projetos.IProjetosServico Projetos
+
+@* Lançamento simples: tipo, valor (teclado numérico, centavos automáticos), categoria cadastrada e dia. Conta é a padrão. *@
+<form class="cartao novo-lancamento @(MostrarTopo ? "" : "novo-lancamento--painel")" aria-labelledby="novo-lanc-titulo" @onsubmit="() => Salvar(false)" @onsubmit:preventDefault>
+    @if (MostrarTopo)
+    {
+        <div class="novo-lancamento__topo">
+            <h2 id="novo-lanc-titulo">Novo lançamento</h2>
+            @if (AoFechar.HasDelegate)
+            {
+                <button type="button" class="botao-icone" aria-label="Fechar" @onclick="AoFechar">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+                </button>
+            }
+        </div>
+    }
+    else
+    {
+        <h2 id="novo-lanc-titulo" class="so-leitor">Novo lançamento</h2>
+    }
+
+    <div class="segmento novo-lancamento__tipo" role="radiogroup" aria-label="Tipo">
+        <button type="button" role="radio" aria-checked="@(!_receita)"
+                class="segmento__opcao @(!_receita ? "segmento__opcao--ativa" : "")" @onclick="() => TrocarTipo(false)">Despesa</button>
+        <button type="button" role="radio" aria-checked="@_receita"
+                class="segmento__opcao @(_receita ? "segmento__opcao--ativa" : "")" @onclick="() => TrocarTipo(true)">Receita</button>
+    </div>
+
+    <div class="campo novo-lancamento__valor">
+        <label for="@_idValor">Valor (R$)</label>
+        <input id="@_idValor" type="text" inputmode="numeric" enterkeyhint="done" autocomplete="off" placeholder="0,00"
+               @bind="_valor" @bind:event="oninput" />
+    </div>
+
+    <div class="campo">
+        <span class="campo__rotulo" id="@($"{_idValor}-cat")">Categoria</span>
+        @if (Categorias.Count == 0)
+        {
+            <p class="vazio">Nenhuma categoria de @(_receita ? "receita" : "despesa") cadastrada. <a href="/cadastros">Crie em Cadastros</a>.</p>
+        }
+        else
+        {
+            <div class="pilulas novo-lancamento__categorias" role="radiogroup" aria-labelledby="@($"{_idValor}-cat")">
+                @foreach (var c in Categorias.Take(LimiteBotoes))
+                {
+                    <button type="button" role="radio" aria-checked="@(c == _categoria)"
+                            class="pilula @(c == _categoria ? "pilula--feita" : "")" @onclick="() => _categoria = c">@c</button>
+                }
+            </div>
+            @if (Categorias.Count > LimiteBotoes)
+            {
+                <label class="so-leitor" for="@($"{_idValor}-outras")">Outras categorias</label>
+                <select id="@($"{_idValor}-outras")" class="seletor" value="@(Categorias.Take(LimiteBotoes).Contains(_categoria) ? "" : _categoria)" @onchange="AoEscolherNaLista">
+                    <option value="">Outras categorias…</option>
+                    @foreach (var c in Categorias.Skip(LimiteBotoes).OrderBy(c => c, StringComparer.CurrentCultureIgnoreCase))
+                    {
+                        <option value="@c">@c</option>
+                    }
+                </select>
+            }
+        }
+    </div>
+
+    <div class="campo">
+        <span class="campo__rotulo" id="@($"{_idValor}-quando")">Quando</span>
+        <div class="pilulas" role="radiogroup" aria-labelledby="@($"{_idValor}-quando")">
+            <button type="button" role="radio" aria-checked="@(_data == Hoje && !_outraData)" class="pilula pilula--pequena @(_data == Hoje && !_outraData ? "pilula--feita" : "")" @onclick="() => Dia(Hoje)">Hoje</button>
+            <button type="button" role="radio" aria-checked="@(_data == Hoje.AddDays(-1) && !_outraData)" class="pilula pilula--pequena @(_data == Hoje.AddDays(-1) && !_outraData ? "pilula--feita" : "")" @onclick="() => Dia(Hoje.AddDays(-1))">Ontem</button>
+            <button type="button" role="radio" aria-checked="@_outraData" class="pilula pilula--pequena @(_outraData ? "pilula--feita" : "")" @onclick="() => _outraData = true">Outra data</button>
+        </div>
+        @if (_outraData)
+        {
+            <label class="so-leitor" for="@($"{_idValor}-data")">Data</label>
+            <input id="@($"{_idValor}-data")" class="novo-lancamento__data" type="date" @bind="_data" />
+        }
+    </div>
+
+    <details class="mais-opcoes" open="@(_repetir || !string.IsNullOrEmpty(_projetoTexto))">
+        <summary>Mais opções</summary>
+    @if (_projetos.Count > 0)
+    {
+        <div class="campo">
+            <label for="@($"{_idValor}-projeto")">Projeto (opcional)</label>
+            <select id="@($"{_idValor}-projeto")" class="seletor" @bind="_projetoTexto">
+                <option value="">Nenhum</option>
+                @foreach (var p in _projetos)
+                {
+                    <option value="@p.Id">@p.Nome</option>
+                }
+            </select>
+        </div>
+    }
+
+    <label class="novo-lancamento__repetir">
+        <input type="checkbox" @bind="_repetir" />
+        <span>Repetir todo mês@(_repetir ? $" (dia {_data.Day})" : "")</span>
+    </label>
+    </details>
+
+    @if (_erro is not null)
+    {
+        <p class="novo-lancamento__erro" role="alert">@_erro</p>
+    }
+
+    <div class="novo-lancamento__rodape">
+        <button type="button" class="botao botao--fantasma" disabled="@_salvando" @onclick="() => Salvar(true)">Salvar e outro</button>
+        <button type="submit" class="botao botao--primario" disabled="@_salvando">Salvar</button>
+    </div>
+</form>
+
+@code {
+    [Parameter] public EventCallback AoFechar { get; set; }
+    /// <summary>Chamado depois de "Salvar" (não no "lançar outro"): o painel do celular fecha aqui.</summary>
+    [Parameter] public EventCallback AoSalvar { get; set; }
+    [Parameter] public bool MostrarTopo { get; set; } = true;
+    [Parameter] public bool ComecarComoReceita { get; set; }
+    /// <summary>Já vem com o projeto escolhido (botão "Lançar gasto" dentro do projeto).</summary>
+    [Parameter] public Guid? ProjetoInicial { get; set; }
+
+    private IReadOnlyList<Favoa.Core.Projetos.ProjetoResumo> _projetos = [];
+    private string _projetoTexto = "";
+
+    private const int LimiteBotoes = 6;
+    private static DateOnly Hoje => EventosFavoa.Hoje;
+    private readonly string _idValor = $"nl-valor-{Guid.NewGuid():N}"[..17];
+
+    private bool _receita;
+    private DateOnly _data = EventosFavoa.Hoje;
+    private bool _outraData;
+    private string? _categoria;
+    private string _valor = "";
+    private bool _repetir;
+    private string? _erro;
+    private bool _salvando;
+    private ContextoCaptura? _ctx;
+
+    private IReadOnlyList<string> Categorias => _ctx?.CategoriasDo(_receita ? TipoCaptura.Receita : TipoCaptura.Despesa) ?? [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _receita = ComecarComoReceita;
+        _ctx = await Servico.ObterContextoAsync(EventosFavoa.Hoje);
+        // Projetos que ainda recebem gastos (não concluídos), mais o que já veio escolhido.
+        _projetos = (await Projetos.ListarAsync(EventosFavoa.Hoje))
+            .Where(p => p.Situacao != Favoa.Core.Projetos.SituacaoProjeto.Concluido || p.Id == ProjetoInicial).ToList();
+        _projetoTexto = ProjetoInicial?.ToString() ?? "";
+    }
+
+    protected override async Task OnAfterRenderAsync(bool primeira)
+    {
+        if (!primeira) return;
+        try
+        {
+            await JS.InvokeVoidAsync("favoa.mascaraMoeda", _idValor); // digita 4590 → 45,90
+            await JS.InvokeVoidAsync("favoa.focar", _idValor);
+        }
+        catch (JSDisconnectedException) { }
+    }
+
+    private void TrocarTipo(bool receita)
+    {
+        if (_receita == receita) return;
+        _receita = receita;
+        _categoria = null; // categorias de despesa e de receita são listas diferentes
+    }
+
+    private void Dia(DateOnly dia)
+    {
+        _data = dia;
+        _outraData = false;
+    }
+
+    private void AoEscolherNaLista(ChangeEventArgs e)
+    {
+        var valor = e.Value?.ToString();
+        if (!string.IsNullOrEmpty(valor)) _categoria = valor;
+    }
+
+    private async Task Salvar(bool outro)
+    {
+        _erro = null;
+        if (_salvando) return;
+        if (Texto.LerMoeda(_valor) is not { } centavos) { _erro = "Digite o valor."; await JS.InvokeVoidAsync("favoa.focar", _idValor); return; }
+        if (_categoria is null || !Categorias.Contains(_categoria)) { _erro = "Escolha a categoria."; return; }
+
+        _salvando = true;
+        try
+        {
+            var interp = new Interpretacao(_receita ? TipoCaptura.Receita : TipoCaptura.Despesa, _categoria)
+            {
+                ValorCentavos = centavos,
+                Categoria = _categoria,
+                Data = _data,
+                RepetirTodoMes = _repetir,
+                ProjetoId = Guid.TryParse(_projetoTexto, out var pid) ? pid : null,
+            };
+
+            var resultado = await Servico.RegistrarAsync(interp);
+            Eventos.MostrarMensagem(resultado.Mensagem, resultado.Sucesso ? resultado.Criado : null);
+            if (!resultado.Sucesso) { _erro = resultado.Mensagem; return; }
+
+            _categoria = null;
+            _valor = "";
+            _repetir = false;
+            _ctx = await Servico.ObterContextoAsync(EventosFavoa.Hoje); // as mais usadas sobem
+            await Eventos.NotificarRegistroSalvoAsync();
+            if (!outro && AoSalvar.HasDelegate) { await AoSalvar.InvokeAsync(); return; }
+            Dia(Hoje);
+            await JS.InvokeVoidAsync("favoa.focar", _idValor);
+        }
+        finally
+        {
+            _salvando = false;
+        }
+    }
+}

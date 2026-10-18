@@ -1,0 +1,153 @@
+@using Favoa.Core.Projetos
+@inject IProjetosServico Projetos
+@inject IJSRuntime JS
+
+@* Criar ou editar um projeto. Projeto novo já vem com o checklist do tipo (viagem, trabalho, casa). *@
+<form class="cartao form-projeto" @onsubmit="Salvar" @onsubmit:preventDefault aria-labelledby="fp-titulo">
+    <div class="novo-lancamento__topo">
+        <h2 id="fp-titulo">@(Existente is null ? "Novo projeto" : "Editar projeto")</h2>
+        <button type="button" class="botao-icone" aria-label="Fechar" @onclick="AoFechar">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+        </button>
+    </div>
+
+    <div class="campo">
+        <label for="fp-nome">Nome</label>
+        <input id="fp-nome" type="text" autocomplete="off" maxlength="80" placeholder="@Exemplo" @bind="_nome" @bind:event="oninput" />
+    </div>
+
+    <div class="campo">
+        <span class="campo__rotulo" id="fp-tipo">Tipo</span>
+        <div class="segmento form-projeto__tipos" role="radiogroup" aria-labelledby="fp-tipo">
+            @foreach (var t in Tipos)
+            {
+                <button type="button" role="radio" aria-checked="@(_tipo == t)" class="segmento__opcao @(_tipo == t ? "segmento__opcao--ativa" : "")" @onclick="() => _tipo = t">@TiposProjeto.Nome(t)</button>
+            }
+        </div>
+        @if (Existente is null && TiposProjeto.Modelo(_tipo).Count > 0)
+        {
+            <p class="dados__dica">Começa com uma lista de @TiposProjeto.Modelo(_tipo).Count itens típicos de @TiposProjeto.Nome(_tipo).ToLowerInvariant(). Dá para apagar ou somar itens depois.</p>
+        }
+    </div>
+
+    <div class="campo-linha">
+        <div class="campo">
+            <label for="fp-inicio">@RotuloInicio</label>
+            <input id="fp-inicio" type="date" @bind="_inicio" />
+        </div>
+        <div class="campo">
+            <label for="fp-fim">@RotuloFim</label>
+            <input id="fp-fim" type="date" @bind="_fim" />
+        </div>
+    </div>
+
+    <div class="campo-linha">
+        <div class="campo">
+            <label for="fp-situacao">Situação</label>
+            <select id="fp-situacao" class="seletor" @bind="_situacao">
+                @foreach (var s in Situacoes)
+                {
+                    <option value="@s">@TiposProjeto.Nome(s)</option>
+                }
+            </select>
+        </div>
+        <div class="campo">
+            <label for="fp-orcamento">Orçamento (R$, opcional)</label>
+            <input id="fp-orcamento" type="text" inputmode="numeric" autocomplete="off" placeholder="0,00" @bind="_orcamento" @bind:event="oninput" />
+        </div>
+    </div>
+
+    <div class="campo">
+        <label for="fp-descricao">Descrição (opcional)</label>
+        <textarea id="fp-descricao" rows="2" maxlength="2000" placeholder="O que é, para quem, o que conta como pronto" @bind="_descricao"></textarea>
+    </div>
+
+    <div class="campo">
+        <span class="campo__rotulo" id="fp-quem">Quem vê</span>
+        <div class="segmento" role="radiogroup" aria-labelledby="fp-quem">
+            <button type="button" role="radio" aria-checked="@_daCasa" class="segmento__opcao @(_daCasa ? "segmento__opcao--ativa" : "")" @onclick="() => _daCasa = true">A casa</button>
+            <button type="button" role="radio" aria-checked="@(!_daCasa)" class="segmento__opcao @(!_daCasa ? "segmento__opcao--ativa" : "")" @onclick="() => _daCasa = false">Só eu</button>
+        </div>
+    </div>
+
+    @if (_erro is not null) { <p class="novo-lancamento__erro" role="alert">@_erro</p> }
+
+    <div class="novo-lancamento__rodape">
+        <button type="button" class="botao botao--fantasma" @onclick="AoFechar">Cancelar</button>
+        <button type="submit" class="botao botao--primario" disabled="@_salvando">@(Existente is null ? "Criar projeto" : "Salvar")</button>
+    </div>
+</form>
+
+@code {
+    [Parameter] public ProjetoDetalhe? Existente { get; set; }
+    [Parameter] public EventCallback AoFechar { get; set; }
+    [Parameter] public EventCallback<Guid> AoSalvar { get; set; }
+
+    private static readonly TipoProjeto[] Tipos = [TipoProjeto.Viagem, TipoProjeto.Trabalho, TipoProjeto.Casa, TipoProjeto.Outro];
+    private static readonly SituacaoProjeto[] Situacoes =
+        [SituacaoProjeto.Ideia, SituacaoProjeto.Planejando, SituacaoProjeto.EmAndamento, SituacaoProjeto.Pausado, SituacaoProjeto.Concluido];
+
+    private string _nome = "";
+    private TipoProjeto _tipo = TipoProjeto.Viagem;
+    private SituacaoProjeto _situacao = SituacaoProjeto.Planejando;
+    private DateOnly? _inicio, _fim;
+    private string _orcamento = "";
+    private string _descricao = "";
+    private bool _daCasa = true;
+    private string? _erro;
+    private bool _salvando;
+
+    private string Exemplo => _tipo switch
+    {
+        TipoProjeto.Viagem => "Ex.: Viagem Chile",
+        TipoProjeto.Trabalho => "Ex.: Site da padaria",
+        TipoProjeto.Casa => "Ex.: Reforma da cozinha",
+        _ => "Ex.: Festa de aniversário",
+    };
+    private string RotuloInicio => _tipo == TipoProjeto.Viagem ? "Ida" : "Início";
+    private string RotuloFim => _tipo switch { TipoProjeto.Viagem => "Volta", TipoProjeto.Trabalho => "Entrega", _ => "Fim" };
+
+    protected override void OnInitialized()
+    {
+        if (Existente is not { } e) return;
+        var r = e.Resumo;
+        _nome = r.Nome;
+        _tipo = r.Tipo;
+        _situacao = r.Situacao;
+        _inicio = r.Inicio;
+        _fim = r.Fim;
+        _orcamento = r.OrcamentoCentavos is { } o ? (o / 100m).ToString("N2", new System.Globalization.CultureInfo("pt-BR")) : "";
+        _descricao = e.Descricao;
+        _daCasa = r.DaCasa;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool primeira)
+    {
+        if (!primeira) return;
+        try
+        {
+            await JS.InvokeVoidAsync("favoa.mascaraMoeda", "fp-orcamento");
+            if (Existente is null) await JS.InvokeVoidAsync("favoa.focar", "fp-nome");
+        }
+        catch (JSDisconnectedException) { }
+    }
+
+    private async Task Salvar()
+    {
+        _erro = null;
+        long? orcamento = null;
+        if (!string.IsNullOrWhiteSpace(_orcamento))
+        {
+            if (Texto.LerMoeda(_orcamento) is not { } c) { _erro = "Orçamento inválido. Ex.: 6.000,00"; return; }
+            orcamento = c;
+        }
+        _salvando = true;
+        try
+        {
+            var r = await Projetos.SalvarAsync(new DadosProjeto(Existente?.Resumo.Id, _nome, _tipo, _situacao, _inicio, _fim, orcamento, _descricao, _daCasa));
+            if (!r.Sucesso) { _erro = r.Mensagem; return; }
+            await AoSalvar.InvokeAsync(r.Criado!.Id);
+        }
+        finally { _salvando = false; }
+    }
+}

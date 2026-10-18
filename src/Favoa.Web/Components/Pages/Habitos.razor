@@ -1,0 +1,235 @@
+@page "/habitos"
+@using System.Globalization
+@using Favoa.Core.Edicao
+@using Favoa.Core.Rotina
+@implements IDisposable
+@inject IFavoaServico Servico
+@inject EventosFavoa Eventos
+
+<PageTitle>Hábitos · Fávoa</PageTitle>
+
+<main class="modulo modulo--largo">
+    <header class="pagina__topo">
+        <div class="pagina__titulo">
+            <h1>Hábitos</h1>
+            @if (_quadro is { Ativos.Count: > 0 })
+            {
+                <p class="pagina__resumo"><span>@_quadro.FeitosHoje de @_quadro.Ativos.Count feitos hoje</span></p>
+            }
+        </div>
+    </header>
+
+    <div class="nova">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--mel)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+        <label class="so-leitor" for="novo-habito">Novo hábito</label>
+        <input id="novo-habito" type="text" autocomplete="off" placeholder="Novo hábito. Ex.: ler 20 min"
+               @bind="_novo" @bind:event="oninput" @onkeydown="AoTeclar" />
+        <button type="button" class="botao botao--primario" disabled="@string.IsNullOrWhiteSpace(_novo)" @onclick="Criar">Criar</button>
+    </div>
+
+    @if (_quadro is null)
+    {
+        <p class="carregando">Carregando…</p>
+    }
+    else if (_quadro.Ativos.Count == 0 && _quadro.Arquivados.Count == 0)
+    {
+        <div class="cartao modulo__vazio">
+            <p class="vazio">Nenhum hábito ainda. Comece com um pequeno: <em>ler 20 min</em>, <em>caminhar</em>, <em>sem açúcar</em>.</p>
+        </div>
+    }
+    else
+    {
+        @if (_quadro.Ativos.Count > 0)
+        {
+            <section class="habitos" aria-label="Hábitos ativos">
+                <div class="habitos__cabecalho" aria-hidden="true">
+                    <span></span>
+                    <div class="habitos__dias">
+                        @foreach (var dia in _quadro.Semana)
+                        {
+                            <span class="habitos__dia @(dia == _quadro.Hoje ? "habitos__dia--hoje" : "")">
+                                <span>@Abrev(dia)</span><strong>@dia.Day</strong>
+                            </span>
+                        }
+                    </div>
+                </div>
+
+                @foreach (var h in _quadro.Ativos)
+                {
+                    <article class="habito" @key="h.Id">
+                        <div class="habito__info">
+                            <div class="habito__topo">
+                                <h2 class="habito__nome">@h.Nome</h2>
+                                <button type="button" class="botao-icone botao-icone--discreto" aria-label="Opções de @h.Nome" aria-expanded="@(_opcoes == h.Id)"
+                                        @onclick="() => AbrirOpcoes(h.Id)">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" /></svg>
+                                </button>
+                            </div>
+                            <p class="habito__numeros">
+                                @if (h.Estatistica.SequenciaAtual > 0)
+                                {
+                                    <span class="habito__sequencia">@Plural(h.Estatistica.SequenciaAtual, "dia seguido", "dias seguidos")</span>
+                                }
+                                else
+                                {
+                                    <span>Comece hoje</span>
+                                }
+                                @if (h.Estatistica.MelhorSequencia > 1)
+                                {
+                                    <span>melhor: @h.Estatistica.MelhorSequencia</span>
+                                }
+                                <span>@h.Estatistica.FeitosNoPeriodo de @QuadroHabitos.DiasHistorico dias</span>
+                            </p>
+                            <div class="trilha" role="img" aria-label="@($"Feito {h.Estatistica.FeitosNoPeriodo} dos últimos {QuadroHabitos.DiasHistorico} dias")">
+                                @foreach (var dia in _quadro.Historico)
+                                {
+                                    <span class="trilha__dia @(h.FeitoEm(dia) ? "trilha__dia--feito" : "")"></span>
+                                }
+                            </div>
+
+                            @if (_opcoes == h.Id)
+                            {
+                                <div class="habito__opcoes">
+                                    @if (_confirmarExclusao == h.Id)
+                                    {
+                                        <span class="habito__aviso">Apagar @h.Nome e todo o histórico?</span>
+                                        <button type="button" class="botao botao--perigo botao--pequeno" @onclick="() => Excluir(h)">Apagar</button>
+                                        <button type="button" class="botao botao--fantasma botao--pequeno" @onclick="() => _confirmarExclusao = null">Manter</button>
+                                    }
+                                    else
+                                    {
+                                        <button type="button" class="botao botao--fantasma botao--pequeno" @onclick="() => Arquivar(h, false)">Arquivar</button>
+                                        <button type="button" class="botao botao--fantasma botao--pequeno botao--perigo-texto" @onclick="() => _confirmarExclusao = h.Id">Excluir</button>
+                                    }
+                                </div>
+                            }
+                        </div>
+
+                        <div class="habitos__dias" role="group" aria-label="@($"{h.Nome} nos últimos 7 dias")">
+                            @foreach (var dia in _quadro.Semana)
+                            {
+                                var feito = h.FeitoEm(dia);
+                                <button type="button" class="celula @(feito ? "celula--feita" : "") @(dia == _quadro.Hoje ? "celula--hoje" : "")"
+                                        aria-pressed="@feito" aria-label="@($"{h.Nome}, {NomeDia(dia)}: {(feito ? "feito" : "não feito")}")"
+                                        @onclick="() => Alternar(h, dia)">
+                                    <span class="celula__dia" aria-hidden="true">@Abrev(dia) @dia.Day</span>
+                                    @if (feito)
+                                    {
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+                                    }
+                                </button>
+                            }
+                        </div>
+                    </article>
+                }
+            </section>
+        }
+
+        @if (_quadro.Arquivados.Count > 0)
+        {
+            <section class="grupo grupo--feitas">
+                <button type="button" class="grupo__alternar" aria-expanded="@_mostrarArquivados" @onclick="() => _mostrarArquivados = !_mostrarArquivados">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
+                         style="transform: rotate(@(_mostrarArquivados ? 90 : 0)deg)"><path d="M9 6l6 6-6 6" /></svg>
+                    Arquivados
+                    <span class="grupo__contagem">@_quadro.Arquivados.Count</span>
+                </button>
+                @if (_mostrarArquivados)
+                {
+                    <ul class="grupo__lista">
+                        @foreach (var h in _quadro.Arquivados)
+                        {
+                            <li class="arquivado" @key="h.Id">
+                                <span class="arquivado__nome">@h.Nome</span>
+                                <span class="arquivado__info">melhor sequência: @h.Estatistica.MelhorSequencia</span>
+                                <button type="button" class="botao botao--fantasma botao--pequeno" @onclick="() => Arquivar(h, true)">Reativar</button>
+                            </li>
+                        }
+                    </ul>
+                }
+            </section>
+        }
+    }
+</main>
+
+@code {
+    private static readonly CultureInfo PtBr = new("pt-BR");
+
+    private QuadroHabitos? _quadro;
+    private string _novo = "";
+    private Guid? _opcoes;
+    private Guid? _confirmarExclusao;
+    private bool _mostrarArquivados;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Eventos.RegistroSalvo += Recarregar;
+        await Recarregar();
+    }
+
+    private async Task Recarregar()
+    {
+        _quadro = await Servico.ObterQuadroHabitosAsync(EventosFavoa.Hoje);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void AbrirOpcoes(Guid id)
+    {
+        _opcoes = _opcoes == id ? null : id;
+        _confirmarExclusao = null;
+    }
+
+    private async Task AoTeclar(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await Criar();
+    }
+
+    private async Task Criar()
+    {
+        if (string.IsNullOrWhiteSpace(_novo)) return;
+        var ctx = await Servico.ObterContextoAsync(EventosFavoa.Hoje);
+        var texto = Texto.Normalizar(_novo).StartsWith("novo habito ") ? _novo : "novo hábito " + _novo;
+        var r = await Servico.RegistrarAsync(InterpretadorFrase.Interpretar(texto, ctx));
+        Eventos.MostrarMensagem(r.Mensagem, r.Sucesso ? r.Criado : null);
+        if (!r.Sucesso) return;
+        _novo = "";
+        await Eventos.NotificarRegistroSalvoAsync();
+    }
+
+    private async Task Alternar(LinhaHabito h, DateOnly dia)
+    {
+        await Servico.AlternarHabitoAsync(h.Id, dia);
+        await Eventos.NotificarRegistroSalvoAsync();
+    }
+
+    private async Task Arquivar(LinhaHabito h, bool ativo)
+    {
+        _opcoes = null;
+        var r = await Servico.DefinirHabitoAtivoAsync(h.Id, ativo);
+        Eventos.MostrarMensagem(r.Mensagem);
+        await Eventos.NotificarRegistroSalvoAsync();
+    }
+
+    private async Task Excluir(LinhaHabito h)
+    {
+        _opcoes = null;
+        _confirmarExclusao = null;
+        var r = await Servico.ExcluirAsync(new ReferenciaRegistro(TipoReferencia.Habito, h.Id));
+        Eventos.MostrarMensagem(r.Sucesso ? $"{h.Nome} excluído." : r.Mensagem);
+        await Eventos.NotificarRegistroSalvoAsync();
+    }
+
+    private static string Abrev(DateOnly dia) => dia.ToString("ddd", PtBr).TrimEnd('.');
+
+    private static string NomeDia(DateOnly dia)
+    {
+        var hoje = EventosFavoa.Hoje;
+        if (dia == hoje) return "hoje";
+        if (dia == hoje.AddDays(-1)) return "ontem";
+        return dia.ToString("dddd, d 'de' MMMM", PtBr);
+    }
+
+    private static string Plural(int n, string um, string varios) => n == 1 ? $"1 {um}" : $"{n} {varios}";
+
+    public void Dispose() => Eventos.RegistroSalvo -= Recarregar;
+}

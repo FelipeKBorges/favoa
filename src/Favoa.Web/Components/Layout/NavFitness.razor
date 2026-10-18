@@ -1,0 +1,24 @@
+@implements IDisposable
+@inject NavigationManager Nav
+
+@* Um item só para Treino, Dieta e Medidas: fica aceso em qualquer uma das três. *@
+<a class="navegacao__item @(Ativo ? "active" : "")" href="treino" aria-current="@(Ativo ? "page" : null)">Fitness</a>
+
+@code {
+    private static readonly string[] Rotas = ["treino", "dieta", "medidas"];
+
+    private bool Ativo
+    {
+        get
+        {
+            var rota = Nav.ToBaseRelativePath(Nav.Uri).Split('?')[0].Trim('/');
+            return Rotas.Any(r => rota.Equals(r, StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    protected override void OnInitialized() => Nav.LocationChanged += AoNavegar;
+
+    private void AoNavegar(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e) => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Nav.LocationChanged -= AoNavegar;
+}

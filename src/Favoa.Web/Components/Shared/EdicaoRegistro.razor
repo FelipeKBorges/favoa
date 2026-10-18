@@ -1,0 +1,282 @@
+@using Favoa.Core.Edicao
+@using Favoa.Core.Financas
+@implements IDisposable
+@inject IFavoaServico Servico
+@inject EventosFavoa Eventos
+@inject IJSRuntime JS
+
+@if (_registro is not null)
+{
+    <div class="captura-fundo" @onclick="Fechar"></div>
+    <div class="edicao" role="dialog" aria-modal="true" aria-labelledby="edicao-titulo" @onkeydown="AoTeclar">
+        <div class="edicao__topo">
+            <h2 id="edicao-titulo">@_registro.TituloTela</h2>
+            <button type="button" class="botao-icone" aria-label="Fechar" @onclick="Fechar">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+            </button>
+        </div>
+
+        <div class="edicao__campos">
+            @switch (_registro.Referencia.Tipo)
+            {
+                case TipoReferencia.Lancamento:
+                    <div class="segmento" role="radiogroup" aria-label="Tipo">
+                        <button type="button" role="radio" aria-checked="@(_tipo == TipoLancamento.Despesa)"
+                                class="segmento__opcao @(_tipo == TipoLancamento.Despesa ? "segmento__opcao--ativa" : "")"
+                                @onclick="() => _tipo = TipoLancamento.Despesa">Despesa</button>
+                        <button type="button" role="radio" aria-checked="@(_tipo == TipoLancamento.Receita)"
+                                class="segmento__opcao @(_tipo == TipoLancamento.Receita ? "segmento__opcao--ativa" : "")"
+                                @onclick="() => _tipo = TipoLancamento.Receita">Receita</button>
+                    </div>
+
+                    <div class="campo-linha">
+                        <div class="campo">
+                            <label for="ed-valor">Valor (R$)</label>
+                            <input id="ed-valor" type="text" inputmode="decimal" @bind="_valorTexto" @bind:event="oninput" />
+                        </div>
+                        <div class="campo">
+                            <label for="ed-data">Data</label>
+                            <input id="ed-data" type="date" @bind="_data" />
+                        </div>
+                    </div>
+
+                    <div class="campo-linha">
+                        <div class="campo">
+                            <label for="ed-categoria">Categoria</label>
+                            <select id="ed-categoria" class="seletor" @bind="_categoria">
+                                @if (!CategoriasDoTipo.Contains(_categoria)) { <option value="">Escolha…</option> }
+                                @foreach (var c in CategoriasDoTipo.OrderBy(c => c, StringComparer.CurrentCultureIgnoreCase)) { <option value="@c">@c</option> }
+                            </select>
+                        </div>
+                        <div class="campo">
+                            <label for="ed-conta">Conta</label>
+                            <input id="ed-conta" type="text" list="ed-contas" @bind="_conta" @bind:event="oninput" />
+                            <datalist id="ed-contas">
+                                @foreach (var c in _registro.ContasDisponiveis) { <option value="@c"></option> }
+                            </datalist>
+                        </div>
+                    </div>
+
+                    @if (_registro.ProjetosDisponiveis.Count > 0)
+                    {
+                        <div class="campo">
+                            <label for="ed-projeto">Projeto</label>
+                            <select id="ed-projeto" class="seletor" @bind="_projeto">
+                                <option value="">Nenhum</option>
+                                @foreach (var p in _registro.ProjetosDisponiveis) { <option value="@p.Id">@p.Nome</option> }
+                            </select>
+                        </div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_descricao))
+                    {
+                        <p class="edicao__texto">Lançado antes com a descrição “@_descricao”.</p>
+                    }
+                    break;
+
+                case TipoReferencia.Agua:
+                    <div class="campo-linha">
+                        <div class="campo">
+                            <label for="ed-ml">Quantidade (ml)</label>
+                            <input id="ed-ml" type="number" min="1" step="50" @bind="_ml" @bind:event="oninput" />
+                        </div>
+                        <div class="campo">
+                            <label for="ed-data">Data</label>
+                            <input id="ed-data" type="date" @bind="_data" />
+                        </div>
+                    </div>
+                    break;
+
+                case TipoReferencia.Tarefa:
+                    <div class="campo">
+                        <label for="ed-titulo">Tarefa</label>
+                        <input id="ed-titulo" type="text" @bind="_titulo" @bind:event="oninput" />
+                    </div>
+                    <CamposTarefa Id="ed-tarefa" @bind-Prazo="_prazo" @bind-Hora="_hora" @bind-AvisoMinutos="_aviso"
+                                  @bind-Responsaveis="_responsaveis" Pessoas="_registro.PessoasDisponiveis" />
+                    <label class="campo campo--check">
+                        <input type="checkbox" @bind="_concluida" />
+                        <span>Concluída</span>
+                    </label>
+                    @if (_registro.ProjetosDisponiveis.Count > 0)
+                    {
+                        <div class="campo">
+                            <label for="ed-projeto">Projeto</label>
+                            <select id="ed-projeto" class="seletor" @bind="_projeto">
+                                <option value="">Nenhum</option>
+                                @foreach (var p in _registro.ProjetosDisponiveis) { <option value="@p.Id">@p.Nome</option> }
+                            </select>
+                        </div>
+                    }
+                    break;
+
+                case TipoReferencia.RegistroHabito:
+                    <p class="edicao__texto">Marcado como feito em @_registro.Data.ToString("dd/MM"). Exclua para desmarcar.</p>
+                    break;
+
+                case TipoReferencia.ExercicioRealizado or TipoReferencia.Consumo or TipoReferencia.Peso:
+                    <p class="edicao__texto"><strong>@_registro.Descricao</strong> em @_registro.Data.ToString("dd/MM").</p>
+                    <p class="edicao__texto">@(_registro.Referencia.Tipo switch
+                    {
+                        TipoReferencia.ExercicioRealizado => "Para ajustar séries e cargas, use a tela de Treino.",
+                        TipoReferencia.Consumo => "Para trocar quantidades, use a tela de Dieta.",
+                        _ => "Para corrigir, registre de novo pela captura (ex.: peso 81,2): o do dia é substituído.",
+                    })</p>
+                    break;
+            }
+
+            @if (_erro is not null)
+            {
+                <p class="captura__aviso" role="alert">@_erro</p>
+            }
+        </div>
+
+        <div class="edicao__acoes">
+            @if (_confirmarExclusao)
+            {
+                <button type="button" class="botao botao--perigo" @onclick="Excluir">Confirmar exclusão</button>
+                <button type="button" class="botao botao--fantasma" @onclick="() => _confirmarExclusao = false">Manter</button>
+            }
+            else
+            {
+                <button type="button" class="botao botao--fantasma botao--perigo-texto" @onclick="() => _confirmarExclusao = true">Excluir</button>
+                <span class="edicao__espaco"></span>
+                @if (_registro.PodeEditar)
+                {
+                    <button type="button" class="botao botao--fantasma" @onclick="Fechar">Cancelar</button>
+                    <button type="button" class="botao botao--primario" @onclick="Salvar">Salvar</button>
+                }
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private IReadOnlyList<string> CategoriasDoTipo => _registro is null ? [] : _tipo == TipoLancamento.Receita ? _registro.CategoriasReceita : _registro.CategoriasDespesa;
+
+    private RegistroEditavel? _registro;
+    private string? _erro;
+    private bool _confirmarExclusao;
+
+    // Campos em edição
+    private TipoLancamento _tipo;
+    private string _valorTexto = "";
+    private DateOnly _data;
+    private string _categoria = "";
+    private string _projeto = "";
+    private string _conta = "";
+    private string _descricao = "";
+    private int _ml;
+    private string _titulo = "";
+    private DateOnly? _prazo;
+    private TimeOnly? _hora;
+    private int? _aviso;
+    private IReadOnlyList<Guid> _responsaveis = [];
+    private bool _concluida;
+
+    protected override void OnInitialized() => Eventos.AbrirEdicaoSolicitada += AbrirPeloEvento;
+
+    private void AbrirPeloEvento(ReferenciaRegistro referencia) => _ = InvokeAsync(() => Abrir(referencia));
+
+    private async Task Abrir(ReferenciaRegistro referencia)
+    {
+        var registro = await Servico.ObterParaEdicaoAsync(referencia);
+        if (registro is null)
+        {
+            Eventos.MostrarMensagem("Esse registro não existe mais.");
+            return;
+        }
+
+        _registro = registro;
+        _erro = null;
+        _confirmarExclusao = false;
+        _tipo = registro.TipoLancamento;
+        _valorTexto = registro.ValorCentavos > 0 ? (registro.ValorCentavos / 100m).ToString("0.00") : "";
+        _data = registro.Data;
+        _categoria = registro.Categoria;
+        _projeto = registro.ProjetoId?.ToString() ?? "";
+        _conta = registro.Conta;
+        _descricao = registro.Descricao;
+        _ml = registro.Mililitros;
+        _titulo = registro.Titulo;
+        _prazo = registro.Prazo;
+        _hora = registro.Hora;
+        _aviso = registro.AvisoMinutos;
+        _responsaveis = registro.Responsaveis;
+        _concluida = registro.Concluida;
+        StateHasChanged();
+
+        var foco = referencia.Tipo switch
+        {
+            TipoReferencia.Lancamento => "ed-valor",
+            TipoReferencia.Agua => "ed-ml",
+            TipoReferencia.Tarefa => "ed-titulo",
+            _ => null,
+        };
+        if (foco is not null) await JS.InvokeVoidAsync("favoa.focar", foco);
+    }
+
+    private void Fechar() => _registro = null;
+
+    private async Task AoTeclar(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape") Fechar();
+        else if (e.Key == "Enter" && _registro?.PodeEditar == true && !_confirmarExclusao) await Salvar();
+    }
+
+    private async Task Salvar()
+    {
+        if (_registro is null) return;
+
+        long valor = 0;
+        if (_registro.Referencia.Tipo == TipoReferencia.Lancamento)
+        {
+            valor = InterpretadorFrase.LerValor(Texto.Normalizar(_valorTexto)) ?? 0;
+            if (valor <= 0)
+            {
+                _erro = "Valor inválido. Use o formato 32,50.";
+                return;
+            }
+        }
+
+        var editado = _registro with
+        {
+            TipoLancamento = _tipo,
+            ValorCentavos = valor,
+            Data = _data,
+            Categoria = _categoria,
+            ProjetoId = Guid.TryParse(_projeto, out var projeto) ? projeto : null,
+            Conta = _conta,
+            Descricao = _descricao,
+            Mililitros = _ml,
+            Titulo = _titulo,
+            Prazo = _prazo,
+            Hora = _hora,
+            AvisoMinutos = _aviso,
+            Responsaveis = _responsaveis,
+            Concluida = _concluida,
+        };
+
+        var resultado = await Servico.SalvarEdicaoAsync(editado);
+        if (!resultado.Sucesso)
+        {
+            _erro = resultado.Mensagem;
+            return;
+        }
+
+        _registro = null;
+        await Eventos.NotificarRegistroSalvoAsync();
+        Eventos.MostrarMensagem(resultado.Mensagem);
+    }
+
+    private async Task Excluir()
+    {
+        if (_registro is null) return;
+
+        var resultado = await Servico.ExcluirAsync(_registro.Referencia);
+        _registro = null;
+        await Eventos.NotificarRegistroSalvoAsync();
+        Eventos.MostrarMensagem(resultado.Mensagem);
+    }
+
+    public void Dispose() => Eventos.AbrirEdicaoSolicitada -= AbrirPeloEvento;
+}

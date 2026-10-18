@@ -1,0 +1,222 @@
+@page "/medidas"
+@using System.Globalization
+@using Favoa.Core.Fitness
+@implements IDisposable
+@inject IFitnessServico Fitness
+@inject EventosFavoa Eventos
+
+<PageTitle>Medidas · Fávoa</PageTitle>
+
+<main class="modulo modulo--largo">
+    <header class="pagina__topo">
+        <AbasFitness Ativa="medidas" />
+        <h1 class="so-leitor">Medidas</h1>
+    </header>
+
+    @if (_painel is null)
+    {
+        <p class="carregando">Carregando…</p>
+    }
+    else
+    {
+        <section class="cartao corpo" aria-label="Peso, altura e IMC">
+            <div class="corpo__linha">
+                <div class="corpo__bloco">
+                    <span class="rotulo">Peso</span>
+                    <strong class="corpo__valor">@(_painel.Pesos.Atual is { } pa ? $"{Kg(pa.Kg)} kg" : "—")</strong>
+                    @if (_painel.Pesos.Atual is { } pd) { <span class="dados__meta">@Quando(pd.Data)</span> }
+                </div>
+                <div class="corpo__bloco">
+                    <span class="rotulo">Altura</span>
+                    <strong class="corpo__valor">@(_painel.AlturaCm is { } al ? $"{al} cm" : "—")</strong>
+                </div>
+                <div class="corpo__bloco">
+                    <span class="rotulo">IMC</span>
+                    <strong class="corpo__valor">@(_painel.Imc is { } imc0 ? Kg(imc0.Valor) : "—")</strong>
+                </div>
+            </div>
+
+            @if (_painel.Imc is { } imc)
+            {
+                <div class="imc" role="img" aria-label="IMC @Kg(imc.Valor), @imc.Faixa">
+                    <div class="imc__escala">
+                        <span class="imc__faixa imc__faixa--baixo" style="flex:@F(3.5)"></span>
+                        <span class="imc__faixa imc__faixa--ok" style="flex:@F(6.5)"></span>
+                        <span class="imc__faixa imc__faixa--alto" style="flex:@F(5)"></span>
+                        <span class="imc__faixa imc__faixa--alto" style="flex:@F(10)"></span>
+                        <span class="imc__marca" style="left:@PosicaoImc(imc.Valor)%"></span>
+                    </div>
+                    <div class="imc__rotulos" aria-hidden="true"><span>18,5</span><span>25</span><span>30</span></div>
+                </div>
+                <p class="imc__texto"><strong>@imc.Faixa</strong> · @imc.Dica</p>
+                @if (CalculoCorpo.PesoSaudavel(_painel.AlturaCm) is { } saud)
+                {
+                    <p class="dados__dica">Para @_painel.AlturaCm cm, a faixa de IMC normal vai de @Kg(saud.Min) a @Kg(saud.Max) kg. O IMC é só uma referência: não mede gordura nem massa muscular.</p>
+                }
+            }
+            else
+            {
+                <p class="dados__dica">@(_painel.AlturaCm is null ? "Informe a altura para calcular o IMC." : "Registre o peso para calcular o IMC.")</p>
+            }
+
+            <div class="dados__acoes">
+                <button type="button" class="botao botao--pequeno" aria-expanded="@(_editando == "peso")" @onclick='() => Editar("peso")'>@(_painel.Pesos.Atual is null ? "Registrar peso" : "Atualizar peso")</button>
+                <button type="button" class="botao botao--pequeno botao--fantasma" aria-expanded="@(_editando == "altura")" @onclick='() => Editar("altura")'>@(_painel.AlturaCm is null ? "Informar altura" : "Mudar altura")</button>
+            </div>
+
+            @if (_editando == "peso")
+            {
+                <div class="peso__registrar">
+                    <label class="mini mini--largo"><span>Peso de hoje (kg)</span>
+                        <input type="number" min="20" max="400" step="0.1" inputmode="decimal" @bind="_pesoNovo" @bind:event="oninput" @onkeydown='e => AoTeclar(e, SalvarPeso)' />
+                    </label>
+                    <button type="button" class="botao botao--pequeno botao--primario" disabled="@(_pesoNovo is null)" @onclick="SalvarPeso">Salvar</button>
+                </div>
+            }
+            else if (_editando == "altura")
+            {
+                <div class="peso__registrar">
+                    <label class="mini mini--largo"><span>Altura (cm)</span>
+                        <input type="number" min="100" max="250" step="1" inputmode="numeric" @bind="_alturaNova" @bind:event="oninput" @onkeydown='e => AoTeclar(e, SalvarAltura)' />
+                    </label>
+                    <button type="button" class="botao botao--pequeno botao--primario" disabled="@(_alturaNova is null)" @onclick="SalvarAltura">Salvar</button>
+                </div>
+            }
+        </section>
+
+        <section class="cartao corpo" aria-label="Medidas do corpo">
+            <div class="categorias__topo">
+                <h2 class="rotulo">Medidas do corpo</h2>
+                <button type="button" class="botao botao--pequeno botao--fantasma" aria-expanded="@(_editando == "medida")" @onclick='() => Editar("medida")'>+ Adicionar</button>
+            </div>
+
+            @if (_editando == "medida")
+            {
+                <div class="peso__registrar">
+                    <label class="mini"><span>Medida</span>
+                        <select class="seletor" @bind="_tipoNovo">
+                            @foreach (var t in TiposMedida.Todos) { <option value="@t">@t</option> }
+                        </select>
+                    </label>
+                    <label class="mini"><span>Centímetros</span>
+                        <input type="number" min="5" max="300" step="0.1" inputmode="decimal" @bind="_cmNovo" @bind:event="oninput" @onkeydown='e => AoTeclar(e, SalvarMedida)' />
+                    </label>
+                    <button type="button" class="botao botao--pequeno botao--primario" disabled="@(_cmNovo is null)" @onclick="SalvarMedida">Salvar</button>
+                </div>
+            }
+
+            @if (_painel.Medidas.Count == 0)
+            {
+                <p class="vazio">Nenhuma medida ainda. Cintura e quadril são um bom começo.</p>
+            }
+            else
+            {
+                <ul class="medidas__lista">
+                    @foreach (var m in _painel.Medidas)
+                    {
+                        <li class="medidas__item">
+                            <div class="medidas__nome">
+                                <span>@m.Tipo</span>
+                                <span class="dados__meta">@Quando(m.Data)</span>
+                            </div>
+                            @if (m.Variacao is { } v && v != 0)
+                            {
+                                <span class="medidas__var">@(v > 0 ? "+" : "−")@Kg(Math.Abs(v)) cm</span>
+                            }
+                            <strong class="medidas__valor">@Kg(m.Cm) cm</strong>
+                        </li>
+                    }
+                </ul>
+            }
+        </section>
+
+        <details class="mais-opcoes corpo__evolucao">
+            <summary>Evolução do peso</summary>
+            <GraficoLinha Pontos="@(_painel.Pesos.Pontos.Select(p => new GraficoLinha.Ponto(p.Data, p.Kg)).ToList())" Unidade="kg"
+                          Rotulo="Peso ao longo do tempo" Vazio="Registre o peso para ver a evolução." />
+        </details>
+    }
+</main>
+
+@code {
+    private static readonly CultureInfo PtBr = new("pt-BR");
+    private PainelMedidas? _painel;
+    private string? _editando;
+    private decimal? _pesoNovo, _cmNovo;
+    private int? _alturaNova;
+    private string _tipoNovo = TiposMedida.Todos[0];
+
+    [SupplyParameterFromQuery(Name = "peso")] public string? PesoQuery { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Eventos.RegistroSalvo += Recarregar;
+        await Recarregar();
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (PesoQuery == "1" && _editando is null) _editando = "peso"; // vem do atalho "Peso"
+    }
+
+    private async Task Recarregar()
+    {
+        _painel = await Fitness.ObterPainelMedidasAsync(EventosFavoa.Hoje);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void Editar(string o)
+    {
+        _editando = _editando == o ? null : o;
+        if (_editando == "altura") _alturaNova = _painel?.AlturaCm;
+    }
+
+    private static async Task AoTeclar(KeyboardEventArgs e, Func<Task> salvar)
+    {
+        if (e.Key == "Enter") await salvar();
+    }
+
+    private async Task SalvarPeso()
+    {
+        if (_pesoNovo is not { } kg) return;
+        var r = await Fitness.RegistrarPesoAsync(EventosFavoa.Hoje, kg);
+        if (r.Sucesso) { _pesoNovo = null; _editando = null; }
+        await Notificar(r);
+    }
+
+    private async Task SalvarAltura()
+    {
+        if (_alturaNova is not { } cm) return;
+        var r = await Fitness.SalvarAlturaAsync(cm);
+        if (r.Sucesso) _editando = null;
+        await Notificar(r);
+    }
+
+    private async Task SalvarMedida()
+    {
+        if (_cmNovo is not { } cm) return;
+        var r = await Fitness.RegistrarMedidaAsync(EventosFavoa.Hoje, _tipoNovo, cm);
+        if (r.Sucesso) { _cmNovo = null; _editando = null; }
+        await Notificar(r);
+    }
+
+    private async Task Notificar(Favoa.Core.ResultadoRegistro r)
+    {
+        Eventos.MostrarMensagem(r.Mensagem, r.Sucesso ? r.Criado : null);
+        if (r.Sucesso) await Eventos.NotificarRegistroSalvoAsync();
+    }
+
+    private static string Kg(decimal v) => v.ToString("0.#", PtBr);
+    private static string F(double v) => v.ToString("0.#", CultureInfo.InvariantCulture);
+
+    // Escala de 15 a 40: a posição do IMC em porcentagem.
+    private static string PosicaoImc(decimal imc) => (Math.Clamp((double)imc, 15, 40) - 15) / 25 * 100 is var p ? p.ToString("0.#", CultureInfo.InvariantCulture) : "0";
+
+    private static string Quando(DateOnly d)
+    {
+        var dias = EventosFavoa.Hoje.DayNumber - d.DayNumber;
+        return dias switch { 0 => "hoje", 1 => "ontem", _ => d.ToString("dd/MM/yyyy", PtBr) };
+    }
+
+    public void Dispose() => Eventos.RegistroSalvo -= Recarregar;
+}

@@ -1,0 +1,133 @@
+# Registro de decisões
+
+Formato: data · decisão · motivo.
+
+- **2026-10-10 · Web local em vez de APK Android.** Stack .NET já dominada, sem verificação de desenvolvedor do Google, sem keystore. Celular entra depois pelo navegador.
+- **2026-10-10 · Blazor Server interativo global + SQLite + EF Core.** Tudo em C#, um processo só, banco em um arquivo copiável.
+- **2026-10-10 · Sem login na v1.** Só abre em localhost. PIN entra junto com o acesso pela rede.
+- **2026-10-10 · Captura por frase com regras.** Previsível, testável, offline e grátis.
+- **2026-10-10 · Dinheiro em centavos (`long`).** Evita erro de arredondamento.
+- **2026-10-10 · `EnsureCreated` até a primeira migração.** Permite rodar sem o `dotnet-ef`; trocar para migrações antes de mudar o esquema com dados reais.
+- **2026-10-10 · Backup diário pela API de backup do SQLite, mantendo 14.** Cópia consistente mesmo com o app aberto.
+- **2026-10-10 · Fontes hospedadas no app.** Bricolage Grotesque (variável) e Manrope em `wwwroot/fonts`, subconjunto latino, com as licenças OFL. Nenhuma chamada para fora: funciona offline.
+- **2026-10-10 · Treino e Projetos aparecem como "em breve".** A colmeia já mostra o desenho completo sem fingir dados.
+- **2026-10-10 · Migração `Inicial` e adoção automática.** Substitui o `EnsureCreated`. Bancos já existentes ganham a linha da migração no histórico sem alterar tabelas, então ninguém perde dados.
+- **2026-10-10 · Exportar/importar em `IDadosFavoa`, separado de `IFavoaServico`.** Mexe com arquivos e com o banco inteiro. Importar valida tudo antes, faz backup e substitui numa transação; formato JSON versionado (`app: "favoa"`, `versao: 1`).
+- **2026-10-10 · CSV com ponto e vírgula, vírgula decimal e BOM.** É o que o Excel em português abre direto, sem configurar a importação.
+- **2026-10-10 · Descrição do lançamento é a sobra da frase.** Antes guardava a frase inteira, que repetia valor, categoria e conta na lista. Lançamentos antigos mantêm o texto original.
+- **2026-10-10 · Desfazer por referência explícita.** Cada registro devolve uma `ReferenciaRegistro` com o que foi criado junto (`CriadosJunto`) e o valor anterior quando houver. Evita heurísticas por horário, que chegavam a apagar categorias iniciais.
+- **2026-10-10 · Área Fitness com tabelas `fit_` e serviço próprio (`IFitnessServico`).** Treino, dieta e peso crescem sem inchar o `IFavoaServico`. A captura continua centralizada em `FavoaServico.RegistrarAsync`, que reaproveita os auxiliares do `FitnessServico`.
+- **2026-10-10 · Base de alimentos TACO embutida.** TACO 4ª ed. (NEPA/UNICAMP) via projeto taco-api (MIT), em `Favoa.Data/taco.json`, carregada no primeiro uso. Funciona offline; alimentos próprios ficam marcados como personalizados.
+- **2026-10-10 · Um registro por exercício na sessão (séries × reps × carga), não por série.** Bate com a forma de falar ("supino 3x10 40kg") e deixa o registro rápido. Série a série pode vir depois se fizer falta.
+- **2026-10-10 · Refeições fixas (café, lanches, almoço, jantar, ceia).** Plano e registro por refeição sem precisar cadastrar refeições.
+- **2026-10-10 · Nome curto na captura usa o exercício existente quando só um começa com ele.** "supino" com só "Supino reto" cadastrado vai para ele; com "reto" e "inclinado", cria um novo em vez de chutar.
+- **2026-10-10 · Treino só entra na média da colmeia depois do primeiro treino.** Quem não treina não começa o dia com uma célula vazia puxando o centro para baixo.
+- **2026-10-10 · Formato de exportação versão 2 (com Fitness).** Arquivos da versão 1 continuam importáveis e não mexem na área Fitness.
+- **2026-10-10 · Integração por MCP local, não por API.** Custo zero além da assinatura, sem chave. O app de desktop inicia `Favoa.Mcp` e conversa por stdin/stdout.
+- **2026-10-10 · MCP implementado à mão (JSON-RPC mínimo), sem SDK.** São quatro métodos (initialize, ping, tools/list, tools/call); evita dependência e funciona offline para compilar.
+- **2026-10-10 · Respostas do MCP em texto curto e ids de 8 caracteres.** Gasta menos do limite da conversa do que JSON completo com GUIDs.
+- **2026-10-10 · Ferramentas que gravam pedem confirmação do usuário (na descrição e nas instruções do servidor).** O cliente propõe; o usuário aprova; só então grava.
+- **2026-10-10 · PIN só para quem vem de fora do PC.** Localhost entra direto (é o dono, na própria máquina). Sem PIN definido, a rede fica fechada: nunca abre por engano.
+- **2026-10-10 · PIN com PBKDF2-SHA256 (210 mil iterações, sal) e cookie assinado pelo Data Protection.** Chaves em `PastaDados\chaves` para o aparelho continuar conectado depois de reiniciar. A "versão de acesso" no cookie derruba todos os aparelhos ao trocar o PIN.
+- **2026-10-10 · Bloqueio progressivo em memória (5 erros → 1 min, dobrando até 15 min).** Suficiente contra adivinhação numa rede de casa; reinicia junto com o app.
+- **2026-10-10 · Sem HTTPS próprio por enquanto.** Na rede de casa o risco é baixo; para fora de casa, o Tailscale criptografa o caminho. HTTPS com certificado local fica para quando houver necessidade.
+- **2026-10-10 · HTTPS pelo `tailscale serve`, não por certificado próprio.** Certificado válido (*.ts.net) sem configurar nada no app, acesso de fora de casa sem abrir porta e PWA instalável no Android.
+- **2026-10-10 · Pedido repassado por proxy local conta como "de fora".** O `tailscale serve` entrega pelo 127.0.0.1; host diferente de localhost ou cabeçalhos de encaminhamento (`Tailscale-*`, `X-Forwarded-*`) exigem PIN. Cabeçalhos encaminhados só identificam a origem (para o bloqueio) quando vêm do próprio PC.
+- **2026-10-10 · Rodar com o Windows por tarefa agendada S4U, não serviço.** S4U roda com o usuário (mesma pasta de dados, passada explicitamente), em segundo plano real (sem console, que no Windows 11 caía ao fechar o Terminal com 0xC000013A), sobe no boot e não guarda senha. Exige administrador para registrar; sem ele, cai para tarefa na sessão. App publicado em `%LOCALAPPDATA%\Favoa\app`.
+- **2026-10-10 · Service worker mínimo.** Só para instalar e mostrar "PC desligado"; não guarda dados nem funciona offline de verdade (o Fávoa vive no PC).
+- **2026-10-10 · Frase curta com valor vira lançamento.** "uber 23" é despesa; receita só com palavra que indique (salário, freela...). Valores seguidos de medida ("20 min", "5 km") não contam, para hábitos e treinos não virarem dinheiro.
+- **2026-10-10 · Palavras-chave para categoria, ligadas às categorias iniciais.** "uber" → Transporte, "ifood" → Alimentação fora. A palavra fica na descrição. Categoria escrita na frase ainda ganha da palavra-chave.
+- **2026-10-10 · Formulário de lançamento em Finanças, sem tirar a captura.** Só tipo, data, descrição e valor (pedido do Davi: simples). Categoria vem da descrição e conta é a padrão; ajustes pela edição do lançamento. O formulário monta uma `Interpretacao` e usa o mesmo `RegistrarAsync` (mesmo desfazer, mesmas regras de conta e categoria).
+- **2026-10-10 · Recorrência controlada por "última data lançada", não pelos lançamentos existentes.** Apagar um lançamento gerado (pular um mês) não faz ele voltar; retomar uma recorrência pausada não lança os meses parados. Dia 31 cai no último dia do mês.
+- **2026-10-10 · Recorrências lançadas pelo próprio app (serviço em segundo plano a cada 10 min), sem pedir confirmação.** Mais simples e cobre o caso comum; errou, edita ou apaga o lançamento.
+- **2026-10-10 · `Lancamento.RecorrenciaId` sem chave estrangeira.** No SQLite, criar FK numa tabela que já existe obriga a recriar a tabela durante a migração, arriscado com dados reais. A ligação é limpa pelo serviço ao excluir a recorrência.
+- **2026-10-10 · Lembretes por Web Push implementado à mão (RFC 8291 + VAPID), sem pacotes.** Funciona no iPhone (app instalado, iOS 16.4+), Android e navegador do PC, usando o HTTPS do Tailscale. Chaves VAPID geradas no primeiro uso e guardadas em `cfg_configuracao` (`push_*`), fora da exportação como o PIN. Lembrete atrasado até 2 h (PC desligado) ainda dispara; depois disso, pula o dia.
+- **2026-10-10 · Orçamento por categoria como campo da categoria (`OrcamentoCentavos`).** Um limite mensal fixo cobre o uso; histórico de limites por mês fica para quando fizer falta.
+- **2026-10-10 · Tela de Cadastros com serviço próprio (`ICadastrosServico`, `ILembretesServico`).** Excluir conta ou categoria usada exige destino: é o mesmo gesto que "juntar".
+- **2026-10-10 · Atualização: publica em pasta separada e troca, com volta automática.** O Fávoa fica no ar durante a compilação; backup do banco antes da troca; se a versão nova não responder, a anterior volta. O script se eleva sozinho (uma confirmação do UAC) porque religar a tarefa S4U exige administrador. Versão (commit) gravada no assembly e mostrada em Seus dados.
+- **2026-10-10 · Cópia no OneDrive feita pelo próprio app (a cada 30 min, só o que mudou).** Banco por dia (30), dados atuais em .db, JSON e CSV, e o código como `git bundle --all` (um arquivo, histórico completo, sem as pastas bin/obj). Configuração e estado em `nuvem.json` na pasta de dados, fora do banco: é deste PC e não pode alterar o banco a cada cópia (senão "mudou" sempre). Arquivos gravados em `.tmp` e trocados no fim, para o OneDrive nunca subir uma cópia pela metade.
+- **2026-10-10 · Lembretes: editar o horário refaz a marca do dia.** Horário que já passou começa amanhã; horário por vir dispara hoje. Antes, criar com horário passado e depois adiantar deixava o lembrete preso até o dia seguinte. "Tarefas de hoje" passou a avisar mesmo sem tarefas (silêncio parecia defeito). Cada envio grava resultado e hora (`UltimoEnvioEm`, `UltimoResultado`) para a tela mostrar; push com `Urgency: high` para o Android entregar na hora mesmo em economia de bateria.
+- **2026-10-10 · Casal no mesmo Fávoa: pessoas, não multi-tenant.** Uma casa só (o PC), com pessoas (`cfg_pessoa`). Finanças e tarefas são da casa; treino, dieta, peso, hábitos, água e lembretes de cada pessoa. Multi-tenant com usuário e senha fica para quando houver outras casas (levantamento feito; ver conversa de 10/10).
+- **2026-10-10 · Separação por filtro global do EF Core.** `FavoaDbContext.PessoaAtual` + `HasQueryFilter` nas tabelas pessoais (`IComDono`) e preenchimento do dono no `SaveChanges`; os serviços pessoais (Favoa, Fitness, Lembretes) viraram *scoped* e abrem o banco com `AbrirAsync(pessoa)`. Nenhuma consulta depende de lembrar de filtrar. Rotinas internas (exportar, agendador, cadastros da casa) abrem sem pessoa e enxergam tudo. Na web, pessoa ausente vira um id inexistente: melhor não mostrar nada do que mostrar os dados de todos.
+- **2026-10-10 · O PIN diz quem é.** Cada pessoa tem PIN próprio (distintos entre si); o cookie leva a pessoa e a versão de acesso dela. No PC (localhost) entra direto como a pessoa do seletor (cookie marcado "local", que nunca vale pela rede). Dados antigos, PIN único e metas viraram da primeira pessoa numa migração única (`acesso_pessoas_migrado`).
+- **2026-10-10 · `PessoaId` sem chave estrangeira e metas por chave com sufixo.** Mesmo motivo das outras colunas: sem recriar tabelas no SQLite. Metas em `cfg_configuracao` como `meta_kcal@{pessoa}`. Índices únicos passaram a incluir a pessoa (hábito por nome, peso por dia).
+- **2026-10-11 · Tela inicial à escolha: colmeia ou calendário, salva por pessoa.** `tela_inicial@{pessoa}` e `calendario_visao@{pessoa}` em `cfg_configuracao`. Visão "automática" abre o mês no PC e a semana no celular (largura da tela, via JS); trocar Mês/Semana salva a escolha.
+- **2026-10-11 · Histórico da colmeia recalculado, não guardado.** `HistoricoColmeia` refaz o `ResumoDoDia` de cada dia a partir dos registros e aplica a mesma `CalculadoraColmeia`: editar um registro antigo corrige o gráfico sozinho, sem tabela nova nem migração. Metas e orçamento usados são os atuais (não guardamos o histórico deles); dias antes do primeiro registro ficam vazios.
+- **2026-10-11 · Gráficos à mão, sem biblioteca.** Linha de progresso em SVG (`preserveAspectRatio="none"`) com rótulos e leitura em HTML, para o texto não encolher no celular; uma série por vez (área escolhida), escala fixa de 0 a 100%, tabela para leitura sem mouse. Mapa de constância com escala de uma cor (âmbar em 4 tons validados contra a superfície escura).
+- **2026-10-11 · "Começar do zero" em Seus dados, só no PC.** Apaga os registros de todos (lançamentos, recorrências, tarefas, hábitos, água, treinos feitos, refeições, peso, lembretes) e mantém pessoas, PINs, aparelhos, configurações, contas, categorias, fichas e plano. Backup `antes-de-zerar-*.db` antes; confirmação escrevendo ZERAR. Feito pelo app (EF, mesma conexão) e não por SQL de fora, para não brigar com o banco aberto em modo WAL.
+- **2026-10-12 · Lançamento só em categoria cadastrada, sem descrição livre.** Pedido do Davi: tudo ligado (limite, relatório, calendário). Formulário com as categorias do tipo (6 mais usadas como botões + lista), captura mostra as categorias para tocar quando a da frase não existe, edição e recorrências com lista. Nada cria categoria além de Cadastros > Categorias. Recorrência sem nome leva o nome da categoria. Lançamentos antigos mantêm a descrição que tinham.
+- **2026-10-12 · Celular primeiro.** Até 760 px: barra fixa embaixo (Hoje, Finanças, +, Tarefas, Mais) no lugar do menu e da captura do topo; o + abre um painel de baixo para cima (dinheiro com teclado numérico e centavos automáticos, Hoje/Ontem, Salvar e outro; água em um toque; frase). Ações rápidas no início, água +250/500/750 na Dieta, atalhos no ícone do app (?lancar=despesa|agua), alvos de 44 px. A máscara de dinheiro roda no navegador (favoa.mascaraMoeda) para não perder dígitos com a latência do Blazor Server. No PC nada muda além do formulário com Hoje/Ontem e a máscara.
+- **2026-10-12 · Base de alimentos: TACO + IBGE embutidas, Open Food Facts sob demanda.** IBGE (POF 2008-2009, 1.427 itens depois de tirar preparos com a mesma composição) gerado de `tabelacompleta.xls` por `ferramentas/dados/ibge2json.py` e embutido como `ibge.json`; entra também em bancos antigos ao iniciar. TACO aparece antes quando os dois têm o alimento. Open Food Facts (ODbL, crédito na tela) só quando a pessoa pede, pela internet do PC; só produtos com kcal e os três macros; o escolhido vira alimento local (`Fonte`, `CodigoExterno` = código de barras) e não repete. TBCA ficou de fora: reuso exige licença paga da USP.
+- **2026-10-12 · Cópia no OneDrive acha o git fora do PATH.** Em segundo plano (S4U) o PATH não tinha o git e o código parou de ir para o OneDrive; agora procura em Program Files.
+- **2026-10-12 · Projetos como pasta, não como módulo à parte.** `prj_projeto` e `prj_item` (checklist, marco, nota) mais `ProjetoId` opcional em tarefas e lançamentos (sem FK). Tarefa e gasto do projeto continuam nas telas de sempre e contam no mês; o projeto só soma. Projeto da casa = `PessoaId` nulo; pessoal = dono. Não é `IComDono` (o `SaveChanges` daria dono ao projeto da casa); filtro próprio: casa para todos, pessoal só para o dono. Ligar pela frase com `#apelido` (acha por nome igual, palavra igual ou começo de palavra). Célula Projetos da colmeia mostra o progresso médio dos ativos, fora da média do dia (projeto é de longo prazo). Modelos de checklist por tipo (viagem, trabalho, casa).
+- **2026-10-12 · Tarefa com horário, lembrete e responsáveis.** `rot_tarefa` ganhou `Hora`, `AvisoMinutos` (nulo = sem lembrete, 0 = na hora) e `AvisoEnviadoEm`; responsáveis na tabela nova `rot_tarefa_responsavel` (FK só nela, sem recriar `rot_tarefa`), vazio = a casa. Horário exige dia, lembrete exige horário. O agendador manda o push no horário menos a antecedência para os aparelhos dos responsáveis (ou de todos); passou mais de 15 min da hora sem avisar, marca sem mandar; mudar dia, hora ou antecedência libera novo aviso. Frase: "às 15h", "avisar 30 min antes", "@eva". Exportação formato 7.
+- **2026-10-12 · Agendador sempre como "nenhuma pessoa".** Na web, fora de um pedido, `PessoaDoUsuario` devolve `Guid.Empty` (fecha tudo de propósito), e o agendador pegava esse `IPessoaAtual` do escopo: não via lembretes nem aparelhos, então nenhum push saía desde a separação por pessoa. `AgendadorFavoa.DispararLembretesAsync` cria o `LembretesServico` com `PessoaFixa(null)`; teste em `TarefaHorarioTests`.
+- **2026-10-13 · Gasto calórico bruto por METs e meta do dia ajustada.** kcal = MET × peso × horas (Compendium, valores aproximados; erro de 20–30%). Só muay thai, futebol, musculação e corrida: os dois primeiros são exercícios Cardio reconhecidos pelo nome (`GastoCalorico.Classificar`), sem mexer no enum; intensidade leve/moderada/intensa por linha (`Intensidade`); corrida usa a velocidade; musculação usa a duração informada (`MinutosForca`, `IntensidadeForca` na sessão) ou 3 min por série. Peso do dia = último registro até a data; sem peso, sem gasto. Calculado na leitura, não gravado (registrar o peso depois já preenche). Meta do dia = meta base + gasto × `CompensacaoTreinoPct`/100 (padrão 100%, em Dieta > Metas); vale na Dieta, na home e no calendário. Exportação formato 8.
+- **2026-10-14 · Melhorias de UX em rodadas (review de 14/10).** Home: card "Agora" (`ProximaAcao`: refeição do horário, atrasadas, treino do dia, nunca sugere treino com a meta da semana batida) e "Primeiros passos" (`PrimeirosPassos`: peso, meta de calorias, orçamento, hábito, notificações; some sozinho ou ao dispensar). Barra de baixo com 3 atalhos escolhidos por aparelho. Preferências por aparelho (barra, tema, passos dispensados) ficam em `localStorage`, não no banco: não vão para o exportar nem para o celular da outra pessoa. Dieta copia a refeição de outro dia (`CopiarRefeicaoAsync`) e lista os "mais usados" dos últimos 60 dias; Treino repete o último treino (`PrepararRepeticaoAsync`) e registra esportes em um toque.
+- **2026-10-14 · Tema claro/escuro/automático por aparelho.** Cores só por tokens em `:root`; `:root[data-tema="claro"]` troca a paleta (âmbar escurecido para contraste no fundo claro). O script inline de `App.razor` aplica o tema antes da pintura (sem piscar); "automático" segue `prefers-color-scheme`.
+- **2026-10-14 · Resumo da semana calculado, não guardado.** `ResumoSemana.Calcular` (Core, puro) usa os mesmos `DadosHistorico` da colmeia: 7 dias terminando hoje contra os 7 anteriores. Hábitos sem nenhum criado mostram convite, não "0%".
+- **2026-10-14 · Colmeia vazia não conta tarefa como feita.** Sem nenhuma tarefa cadastrada (`SemTarefasCadastradas`) a célula Tarefas fica vazia ("Nenhuma · crie a primeira"); com tarefas, dia sem pendência continua "Livre" e cheio. Evita "25%" num app recém-instalado. Selo de quem lançou em Finanças só aparece quando há mais de um autor no mês; gráfico de peso só com 2 pesagens ou mais.
+
+## 2026-10-16 — Menos cliques (rodadas D e E)
+
+- Esporte em um toque: a pílula mostra "nome · N min" (último registro) e salva direto, com Desfazer.
+- Peso compacto no topo da Dieta (celular); `/dieta?peso=1` já abre o campo.
+- Botão "Mais" mostra o nome da seção atual. Um verbo por ação: "Salvar" em formulários, "Adicionar" em listas.
+- Atalhos rápidos aprendem por pessoa: os 3 mais usados nos últimos 14 dias (`AtalhosRapidos`, `ObterUsoRecenteAsync`).
+- Home no celular em duas camadas: "Agora" (inclui o primeiro hábito pendente) e o resumo atrás de "Ver o resumo do dia"; colmeia menor.
+
+## 2026-10-16 — Menos cliques (rodada F)
+
+- O "+" do celular abre uma grade de 6 blocos (Despesa, Receita, Água, Refeição, Treino, Peso) no lugar das abas; frase fica como link discreto.
+- "Mais opções" recolhido: projeto e repetir em Lançar; dia e observação no Treino (abre sozinho se estiverem preenchidos).
+- Aba Plano: refeição sem itens vira uma linha com "+ Adicionar".
+- Primeiros passos em uma linha ("4 de 5 · próximo passo" + Continuar); toque para abrir a lista.
+
+## 2026-10-16 — Visual, rodada 1
+
+- Celular: a colmeia sobe para logo abaixo da saudação (menor); o parágrafo explicativo sai (o percentual já está no centro).
+- Hierarquia: "Agora" com destaque âmbar; "Primeiros passos" vira linha sem caixa; resto fica calmo.
+- Data da Dieta é uma pílula ("sex, 16 out") com o seletor nativo invisível por cima; checkboxes de tarefa no tema.
+- Animações curtas: a colmeia enche ao entrar e brilha quando o dia fecha (respeita "reduzir movimento").
+
+## 2026-10-16 — Visual, rodada 2
+
+- Dieta: anel de calorias com as macros ao lado (troca a barra larga); água virou copo que enche + atalhos "+250/+500/+750" na mesma linha.
+- Peso compacto mostra mini-linha de tendência (últimos 30 registros).
+- Ícones de traço (`Icone.razor`): esportes no Treino e refeições na Dieta. Cuidado: nunca ponha `"` dentro de atributo Razor (use método) — quebra o circuito.
+
+## 2026-10-16 — Visual, PC largo
+
+- A partir de 1000 px a Home usa duas colunas iguais: colmeia à esquerda (visível sem rolar), "Agora", primeiros passos e resumo à direita. Abaixo disso mantém o layout anterior. Só CSS (grid + `display: contents`), sem informação nova.
+
+- Correção: o anel de calorias usava a classe `.anel`, que já é do componente `Anel` (calendário); renomeado para `.anel-kcal*`. Antes de criar uma classe CSS, procure se o nome já existe (`grep -n "^\.nome" app.css`).
+
+## 2026-10-17 — Finanças
+
+- O histórico de lançamentos começa fechado ("Histórico de lançamentos · N lançamentos" com seta); abre ao tocar. Abre sozinho se houver filtro, busca ou categoria escolhida (para não esconder o resultado de quem filtrou).
+
+## 2026-10-17 — Fitness em um lugar
+
+- Treino, Dieta e Medidas viram o hub **Fitness**: um item no menu (PC e celular) e `AbasFitness` no topo de cada tela, no lugar do título. As rotas `/treino`, `/dieta` e `/medidas` continuam (atalhos, lembretes e links antigos funcionam). A barra de baixo guarda "fitness"; preferências antigas com "treino"/"dieta" são convertidas.
+- Medidas: peso (registro de sempre), altura (por pessoa), IMC (peso/altura², faixas da OMS, escala com a faixa normal em âmbar, aviso de que não mede gordura nem músculo) e circunferências (cintura, quadril, peito, braço, coxa, panturrilha, pescoço) com variação desde o registro anterior. Gráfico de peso recolhido.
+- Dados: tabela nova `fit_medida` (migração `MedidasCorporais`, escrita à mão: o `dotnet-ef` não está instalado no ambiente de desenvolvimento do container), exportação v9.
+- O atalho "Peso" (Home e "+") agora abre `/medidas?peso=1`. A Dieta mantém a linha compacta de peso.
+
+## 2026-10-18 — Refeições recolhidas
+
+- Na Dieta (aba Hoje) cada refeição é um cabeçalho que abre e fecha ("Café da manhã · tem plano · 0 kcal ⌄"); todas começam fechadas. O resumo diz "N itens", "tem plano", "seguiu o plano" ou "vazia". Abrir uma refeição para adicionar alimento a expande sozinha. A tela caiu de ~2,1 para ~1,7 telas no celular com 4 refeições. O atalho "Segui o plano" continua no card "Agora" da Home.
+
+## 2026-10-18 — Várias casas e login por e-mail e senha
+
+- Modelo "Spotify/Netflix": quem cria a conta cria a **família** (a casa); os convidados entram nela por link e compartilham finanças, tarefas e projetos. Treino, dieta, peso e hábitos continuam por pessoa. Isolamento por `FamiliaId` com filtro global do EF; sem família atual (agendador, exportação, testes) o filtro não restringe.
+- O PIN acabou. Entrada por e-mail e senha (PBKDF2, mínimo 8 caracteres, lista de senhas comuns, bloqueio progressivo por conta e por origem). A sessão é um cookie HttpOnly validado a cada pedido contra a versão de acesso: trocar a senha ou "sair de todos os aparelhos" derruba as outras sessões. Tokens pessoais (para o MCP) ficam para a etapa 3.
+- Migração `FamiliasEAcesso`: cria a primeira família a partir das pessoas atuais. No primeiro acesso, no PC, a tela "Quem é você?" liga o e-mail e a senha a uma pessoa existente; o dono convida as demais em Dados → Pessoas e acesso.
+- Sem e-mail de recuperação ainda (sem nuvem): senha esquecida se redefine pelo PC com `--redefinir-senha`. Vira e-mail na etapa da nuvem.
+- Importar, zerar e exportar ficam só para o dono e só com uma família no banco, para um backup de uma casa nunca sobrescrever outra.
+
+## 2026-10-18 — Fávoa fica de uso pessoal
+
+- Decisão: o Fávoa continua só para uso pessoal (Davi e Eva), no PC com acesso pelo celular via Tailscale. Fora de escopo, por ora: publicar na nuvem, lojas de aplicativos, anúncios, assinatura e Postgres.
+- O modelo de famílias e o login por e-mail e senha ficam: protegem o acesso pela rede e deixam convidar outras pessoas da casa. O cadastro aberto (`CadastroAberto`) continua desligado.
+- Recuperação de senha pela linha de comando (`--redefinir-senha`) basta; e-mail de recuperação só entra se a nuvem voltar à pauta.
+- Itens do plano que ainda valem no uso pessoal: teste que garante filtro de família em toda entidade, tela de sessões e segurança, backup antes de atualizar (o atualizador já faz). Cálculos de custo e receita da conversa de hoje (infra US$ 15–100/mês para 500 famílias; anúncios US$ 30–80/mês) ficam como referência caso a decisão mude.

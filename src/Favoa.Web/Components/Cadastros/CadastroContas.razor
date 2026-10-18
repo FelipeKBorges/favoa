@@ -1,0 +1,132 @@
+@using Favoa.Core.Financas
+@inject ICadastrosServico Cadastros
+@inject EventosFavoa Eventos
+
+@if (_quadro is null)
+{
+    <p class="carregando">Carregando…</p>
+}
+else
+{
+    <section class="cartao cadastro cadastro--estreito" aria-labelledby="contas-titulo">
+        <div class="cadastro__topo">
+            <h2 id="contas-titulo">Contas</h2>
+            <button type="button" class="botao botao--fantasma botao--pequeno" @onclick="Novo">+ Nova</button>
+        </div>
+        <p class="cadastro__dica">Lançamentos sem conta vão para a primeira conta ativa (@(_quadro.Contas.FirstOrDefault(c => c.Ativa)?.Nome ?? "—")). Arquivar tira a conta das opções, mas o histórico fica.</p>
+
+        @if (_editando is { Id: null } novo) { @Formulario(novo) }
+
+        <ul class="cadastro__lista">
+            @foreach (var c in _quadro.Contas)
+            {
+                <li class="cadastro__item @(c.Ativa ? "" : "cadastro__item--arquivado")">
+                    @if (_editando is { } e && e.Id == c.Id)
+                    {
+                        @Formulario(e)
+                    }
+                    else if (_excluindo == c.Id)
+                    {
+                        <div class="cadastro__confirmar">
+                            @if (c.Lancamentos > 0)
+                            {
+                                <label for="mover-@c.Id">@c.Lancamentos lançamento(s) de <strong>@c.Nome</strong> vão para:</label>
+                                <select id="mover-@c.Id" class="seletor" @bind="_moverPara">
+                                    <option value="">Escolha…</option>
+                                    @foreach (var outra in _quadro.Contas.Where(o => o.Id != c.Id))
+                                    {
+                                        <option value="@outra.Id">@outra.Nome</option>
+                                    }
+                                </select>
+                            }
+                            else
+                            {
+                                <span>Excluir <strong>@c.Nome</strong>?</span>
+                            }
+                            <div class="cadastro__acoes">
+                                <button type="button" class="botao botao--perigo botao--pequeno" @onclick="() => Excluir(c)">@(c.Lancamentos > 0 ? "Mover e excluir" : "Excluir")</button>
+                                <button type="button" class="botao botao--fantasma botao--pequeno" @onclick="Cancelar">Cancelar</button>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="cadastro__texto">
+                            <span class="cadastro__nome">@c.Nome @if (!c.Ativa) { <span class="etiqueta-arquivada">arquivada</span> }</span>
+                            <span class="cadastro__sub">Saldo @Saldo(c.SaldoCentavos) · @(c.Lancamentos == 1 ? "1 lançamento" : $"{c.Lancamentos} lançamentos")</span>
+                        </div>
+                        <div class="cadastro__acoes">
+                            <button type="button" class="botao botao--fantasma botao--pequeno" @onclick="() => Ativar(c, !c.Ativa)">@(c.Ativa ? "Arquivar" : "Reativar")</button>
+                            <button type="button" class="botao-icone" aria-label="Renomear @c.Nome" @onclick="() => { _excluindo = null; _editando = new Edicao { Id = c.Id, Nome = c.Nome }; }">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z" /></svg>
+                            </button>
+                            <button type="button" class="botao-icone" aria-label="Excluir @c.Nome" @onclick="() => { _excluindo = c.Id; _moverPara = null; _editando = null; }">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12" /></svg>
+                            </button>
+                        </div>
+                    }
+                </li>
+            }
+        </ul>
+        <p class="cadastro__dica">O saldo soma tudo o que foi lançado na conta desde o começo, não é o saldo do banco.</p>
+    </section>
+}
+
+@code {
+    private sealed class Edicao
+    {
+        public Guid? Id { get; init; }
+        public string Nome { get; set; } = "";
+        public string? Erro { get; set; }
+    }
+
+    private QuadroCadastros? _quadro;
+    private Edicao? _editando;
+    private Guid? _excluindo;
+    private Guid? _moverPara;
+
+    protected override async Task OnInitializedAsync() => await Recarregar();
+    private async Task Recarregar() => _quadro = await Cadastros.ObterAsync(EventosFavoa.Hoje);
+    private void Novo() { _excluindo = null; _editando = new Edicao(); }
+    private void Cancelar() { _editando = null; _excluindo = null; }
+
+    private async Task Salvar()
+    {
+        if (_editando is not { } e) return;
+        var r = await Cadastros.SalvarContaAsync(e.Id, e.Nome);
+        if (!r.Sucesso) { e.Erro = r.Mensagem; return; }
+        Eventos.MostrarMensagem(r.Mensagem);
+        _editando = null;
+        await Recarregar();
+    }
+
+    private async Task Ativar(ContaCadastro c, bool ativa)
+    {
+        var r = await Cadastros.DefinirContaAtivaAsync(c.Id, ativa);
+        Eventos.MostrarMensagem(r.Mensagem);
+        if (r.Sucesso) await Recarregar();
+    }
+
+    private async Task Excluir(ContaCadastro c)
+    {
+        var r = await Cadastros.ExcluirContaAsync(c.Id, _moverPara);
+        Eventos.MostrarMensagem(r.Mensagem);
+        if (!r.Sucesso) return;
+        _excluindo = null;
+        await Recarregar();
+    }
+
+    private RenderFragment Formulario(Edicao e) => @<form class="cadastro__form" @onsubmit="Salvar" @onsubmit:preventDefault>
+        <div class="campo">
+            <label for="conta-nome">Nome da conta</label>
+            <input id="conta-nome" type="text" autocomplete="off" placeholder="Ex.: Nubank" @bind="e.Nome" @bind:event="oninput" autofocus />
+        </div>
+        @if (e.Erro is not null) { <p class="cadastro__erro" role="alert">@e.Erro</p> }
+        <div class="cadastro__acoes">
+            <button type="submit" class="botao botao--primario botao--pequeno">Salvar</button>
+            <button type="button" class="botao botao--fantasma botao--pequeno" @onclick="Cancelar">Cancelar</button>
+        </div>
+    </form>;
+
+    private static string Saldo(long c) => c < 0 ? $"− {Texto.FormatarMoeda(-c)}" : Texto.FormatarMoeda(c);
+}

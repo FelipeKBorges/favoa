@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Favoa.Core/Favoa.Core.csproj" />
+    <Project Path="src/Favoa.Data/Favoa.Data.csproj" />
+    <Project Path="src/Favoa.Mcp/Favoa.Mcp.csproj" />
+    <Project Path="src/Favoa.Web/Favoa.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Favoa.Tests/Favoa.Tests.csproj" />
+  </Folder>
+</Solution>

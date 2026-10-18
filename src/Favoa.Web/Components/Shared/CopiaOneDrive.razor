@@ -1,0 +1,120 @@
+@using Favoa.Core.Dados
+@inject ICopiaNuvem Copia
+@inject EventosFavoa Eventos
+
+<section class="cartao dados__bloco" aria-labelledby="t-nuvem">
+    <div class="dados__titulo-linha">
+        <h2 id="t-nuvem" class="rotulo">Cópia no OneDrive</h2>
+        @if (_estado is { Ativa: true } && !_editando)
+        {
+            <button type="button" class="botao botao--fantasma botao--pequeno" disabled="@_ocupado" @onclick="CopiarAgora">Copiar agora</button>
+        }
+    </div>
+
+    @if (_estado is null)
+    {
+        <p class="carregando">Carregando…</p>
+    }
+    else if (_estado.Ativa && !_editando)
+    {
+        <p class="cadastro__ok">Ligada: o Fávoa mantém uma cópia atualizada na nuvem.</p>
+        <dl class="dados__lista">
+            <div><dt>Pasta</dt><dd><code>@_estado.Pasta</code></dd></div>
+            <div><dt>Código</dt><dd>@(_estado.PastaProjeto is { } p ? (MarkupString)$"<code>{System.Net.WebUtility.HtmlEncode(p)}</code>" : (MarkupString)"não copiado")</dd></div>
+            <div><dt>Última cópia</dt><dd>@(_estado.UltimaCopia?.ToString("dd/MM/yyyy HH:mm") ?? "ainda não") @if (_estado.Detalhe is { } d) { <span class="dados__meta"> · @d</span> }</dd></div>
+        </dl>
+        @if (_estado.UltimoErro is { } erro)
+        {
+            <p class="captura__aviso" role="alert">@erro</p>
+        }
+        <p class="dados__dica">
+            Lá ficam: <strong>Backups</strong> (uma cópia do banco por dia, os últimos 30), <strong>Dados</strong> (o banco atual, tudo em JSON e as tabelas em CSV para o Excel,
+            atualizados a cada 30 minutos quando algo muda) e <strong>Codigo</strong> (o projeto com todo o histórico, para recriar com <code>git clone favoa.bundle</code>).
+        </p>
+        <div class="dados__acoes">
+            <button type="button" class="botao botao--fantasma botao--pequeno" @onclick="Editar">Mudar pastas</button>
+            <button type="button" class="botao botao--fantasma botao--pequeno botao--perigo-texto" disabled="@_ocupado" @onclick="Desligar">Desligar</button>
+        </div>
+    }
+    else
+    {
+        <p class="dados__dica">
+            Guarda uma cópia sempre atualizada numa pasta do OneDrive: backups diários do banco, os dados de todas as tabelas (JSON e CSV) e o código do projeto.
+            Se o PC estragar, nada se perde.
+        </p>
+        <form class="cadastro__form" @onsubmit="Salvar" @onsubmit:preventDefault>
+            <div class="campo">
+                <label for="nuvem-pasta">Pasta no OneDrive</label>
+                <input id="nuvem-pasta" type="text" autocomplete="off" spellcheck="false" placeholder="C:\Users\voce\OneDrive\Fávoa" @bind="_pasta" @bind:event="oninput" />
+                @if (_estado.PastaSugerida is null)
+                {
+                    <span class="dados__meta">Não achei o OneDrive sozinho. No Explorer, clique com o botão direito em "Seu Nome – Pessoal" → Propriedades para ver o caminho.</span>
+                }
+            </div>
+            <div class="campo">
+                <label for="nuvem-projeto">Pasta do projeto (para copiar o código)</label>
+                <input id="nuvem-projeto" type="text" autocomplete="off" spellcheck="false" placeholder="Deixe vazio para não copiar o código" @bind="_projeto" @bind:event="oninput" />
+            </div>
+            @if (_erro is not null) { <p class="cadastro__erro" role="alert">@_erro</p> }
+            <div class="cadastro__acoes">
+                <button type="submit" class="botao botao--primario botao--pequeno" disabled="@_ocupado">@(_ocupado ? "Copiando…" : "Ligar e copiar agora")</button>
+                @if (_editando) { <button type="button" class="botao botao--fantasma botao--pequeno" @onclick="() => _editando = false">Cancelar</button> }
+            </div>
+        </form>
+    }
+</section>
+
+@code {
+    private EstadoNuvem? _estado;
+    private string _pasta = "";
+    private string _projeto = "";
+    private string? _erro;
+    private bool _ocupado;
+    private bool _editando;
+
+    protected override async Task OnInitializedAsync() => await Recarregar();
+
+    private async Task Recarregar()
+    {
+        _estado = await Copia.ObterAsync();
+        _pasta = _estado.Pasta ?? _estado.PastaSugerida ?? "";
+        _projeto = _estado.PastaProjeto ?? _estado.ProjetoSugerido ?? "";
+    }
+
+    private void Editar() { _editando = true; _erro = null; }
+
+    private async Task Salvar()
+    {
+        if (string.IsNullOrWhiteSpace(_pasta)) { _erro = "Escolha a pasta do OneDrive."; return; }
+        _ocupado = true;
+        _erro = null;
+        try
+        {
+            var r = await Copia.ConfigurarAsync(_pasta, _projeto);
+            if (!r.Sucesso && (await Copia.ObterAsync()) is not { Ativa: true }) { _erro = r.Mensagem; return; }
+            Eventos.MostrarMensagem(r.Mensagem);
+            _editando = false;
+            await Recarregar();
+        }
+        finally { _ocupado = false; }
+    }
+
+    private async Task CopiarAgora()
+    {
+        _ocupado = true;
+        try
+        {
+            var r = await Copia.CopiarAsync(forcar: true);
+            Eventos.MostrarMensagem(r.Mensagem);
+            await Recarregar();
+        }
+        finally { _ocupado = false; }
+    }
+
+    private async Task Desligar()
+    {
+        var r = await Copia.ConfigurarAsync(null, null);
+        Eventos.MostrarMensagem(r.Mensagem);
+        await Recarregar();
+    }
+}

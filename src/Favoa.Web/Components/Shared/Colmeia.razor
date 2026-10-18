@@ -1,0 +1,63 @@
+@* Sete hexágonos em colmeia: duas colunas laterais deslocadas e a coluna central com "Hoje" no meio. *@
+<div class="colmeia-rolagem">
+    <div class="colmeia @(Completa ? "colmeia--completa" : "")" role="list" aria-label="Colmeia do dia">
+        @for (var i = 0; i < Celulas.Count && i < Posicoes.Length; i++)
+        {
+            var c = Celulas[i];
+            var (x, y) = Posicoes[i];
+            var centro = c.Chave == CelulaColmeia.Hoje;
+            <div role="listitem"
+                 class="hex @(centro ? "hex--centro" : "") @Classe(c.Estado)"
+                 style="left:@(x)px; top:@(y)px; --enchimento:@(Enchimento(c))%">
+                @if (Destino(c.Chave) is { } destino)
+                {
+                    <a class="hex__link" href="@destino" aria-label="Abrir @c.Rotulo"></a>
+                }
+                <div class="hex__miolo">
+                    <div class="hex__mel"></div>
+                    <div class="hex__conteudo">
+                        <span class="hex__rotulo">@c.Rotulo</span>
+                        <span class="hex__valor">@c.Valor</span>
+                        <span class="hex__detalhe">@c.Detalhe</span>
+                    </div>
+                    <span class="so-leitor">@c.Percentual% cheia</span>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<CelulaColmeia> Celulas { get; set; } = [];
+
+    private bool Completa => Celulas.Any(c => c.Chave == CelulaColmeia.Hoje && c.Percentual >= 100);
+
+    // Mesma geometria do canvas de UX: hexágonos 180x156, passo horizontal 135.
+    private static readonly (int X, int Y)[] Posicoes =
+    [
+        (0, 78), (0, 234),
+        (135, 0), (135, 156), (135, 312),
+        (270, 78), (270, 234),
+    ];
+
+    private static string? Destino(string chave) => chave switch
+    {
+        CelulaColmeia.Financas => "financas",
+        CelulaColmeia.Tarefas => "tarefas",
+        CelulaColmeia.Habitos => "habitos",
+        CelulaColmeia.Treino => "treino",
+        CelulaColmeia.Alimentacao => "dieta",
+        CelulaColmeia.Projetos => "projetos",
+        _ => null,
+    };
+
+    private static string Classe(EstadoCelula e) => e switch
+    {
+        EstadoCelula.Alerta => "hex--alerta",
+        EstadoCelula.EmBreve => "hex--em-breve",
+        _ => "",
+    };
+
+    private static string Enchimento(CelulaColmeia c) =>
+        (c.Preenchimento * 100).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture);
+}

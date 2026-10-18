@@ -1,0 +1,580 @@
+@page "/dieta"
+@using System.Globalization
+@using Favoa.Core.Fitness
+@implements IDisposable
+@inject IFitnessServico Fitness
+@inject IFavoaServico Servico
+@inject EventosFavoa Eventos
+@inject NavigationManager Nav
+
+<PageTitle>Dieta · Fávoa</PageTitle>
+
+<main class="modulo modulo--largo">
+    <header class="pagina__topo">
+        <AbasFitness Ativa="dieta" />
+        <div class="pagina__titulo">
+            <h1 class="so-leitor">Dieta</h1>
+            @if (_dia is not null)
+            {
+                <p class="pagina__resumo">
+                    <span>@N(_dia.Total.Kcal) @(_dia.MetaKcalDoDia > 0 ? $"de {N(_dia.MetaKcalDoDia)} " : "")kcal @(EhHoje ? "hoje" : _data.ToString("dd/MM", PtBr))</span>
+                </p>
+            }
+        </div>
+        <nav class="segmento" aria-label="Seções da dieta">
+            @foreach (var (chave, rotulo) in Abas)
+            {
+                <a class="segmento__opcao @(Aba == chave || (Aba == "compras" && chave == "plano") ? "segmento__opcao--ativa" : "")" aria-current="@(Aba == chave ? "page" : null)"
+                   href="@Nav.GetUriWithQueryParameter("aba", chave == "hoje" ? null : chave)">@rotulo</a>
+            }
+        </nav>
+    </header>
+
+    @if (_dia is null)
+    {
+        <p class="carregando">Carregando…</p>
+    }
+    else if (Aba == "hoje")
+    {
+        <nav class="dia-nav" aria-label="Dia da dieta">
+            <a class="botao botao--pequeno botao--fantasma" aria-label="Dia anterior" href="@LinkDia(_data.AddDays(-1))">‹</a>
+            <label class="dia-nav__data">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M4 10h16M9 3v4M15 3v4" /></svg>
+                <span class="dia-nav__texto">@_data.ToString("ddd, dd MMM", PtBr).Replace(".", "")</span>
+                <span class="so-leitor">Escolher o dia</span>
+                <input type="date" value="@_data.ToString("yyyy-MM-dd")" max="@EventosFavoa.Hoje.ToString("yyyy-MM-dd")" @onchange="AoEscolherDia" />
+            </label>
+            <span class="dia-nav__rotulo">@RotuloDia()</span>
+            @if (!EhHoje)
+            {
+                <a class="botao botao--pequeno botao--fantasma" href="@LinkDia(EventosFavoa.Hoje)">Hoje</a>
+            }
+            <a class="botao botao--pequeno botao--fantasma @(EhHoje ? "dia-nav__fim" : "")" aria-label="Próximo dia" aria-disabled="@EhHoje" tabindex="@(EhHoje ? -1 : 0)" href="@(EhHoje ? null : LinkDia(_data.AddDays(1)))">›</a>
+        </nav>
+        <div class="peso-compacto so-celular">
+            <button type="button" class="peso-compacto__linha" aria-expanded="@_pesoAberto" @onclick="() => _pesoAberto = !_pesoAberto">
+                <span>Peso</span>
+                <strong>@(_pesos?.Atual is { } pa ? $"{pa.Kg.ToString("0.0", PtBr)} kg" : "sem registro")</strong>
+                @if (Tendencia is { } trilha)
+                {
+                    <svg class="peso-tendencia" viewBox="0 0 100 28" width="84" height="28" preserveAspectRatio="none" aria-hidden="true"><polyline points="@trilha" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" /></svg>
+                }
+                <span class="peso-compacto__acao">@(_pesoAberto ? "Fechar" : "Atualizar")</span>
+            </button>
+            @if (_pesoAberto)
+            {
+                <div class="peso__registrar">
+                    <label class="mini mini--largo"><span>Peso de hoje (kg)</span>
+                        <input type="number" min="20" max="400" step="0.1" inputmode="decimal" @bind="_pesoHoje" @bind:event="oninput" @onkeydown="AoTeclarPeso" />
+                    </label>
+                    <button type="button" class="botao botao--pequeno botao--primario" disabled="@(_pesoHoje is null)" @onclick="RegistrarPeso">Salvar</button>
+                </div>
+            }
+        </div>
+        <div class="dieta">
+            <div class="dieta__principal">
+                <section class="cartao macros" aria-label="Totais do dia">
+                    <div class="macros__topo">
+                        <div class="anel-kcal @(_dia.MetaKcalDoDia > 0 && _dia.Total.Kcal > _dia.MetaKcalDoDia * 1.1 ? "anel-kcal--estourado" : "")" role="img" aria-label="@(_dia.MetaKcalDoDia > 0 ? $"{Pct(_dia.Total.Kcal, _dia.MetaKcalDoDia)} da meta de calorias" : "Calorias do dia")">
+                            <svg viewBox="0 0 120 120" width="116" height="116" aria-hidden="true">
+                                <circle class="anel-kcal__fundo" cx="60" cy="60" r="52" />
+                                <circle class="anel-kcal__valor" cx="60" cy="60" r="52" pathLength="100" stroke-dasharray="@AnelTraco" />
+                            </svg>
+                            <div class="anel-kcal__centro">
+                                <span class="resumo__valor">@N(_dia.Total.Kcal)</span>
+                                <span class="orcamento__de">@(_dia.MetaKcalDoDia > 0 ? $"de {N(_dia.MetaKcalDoDia)}" : "kcal")</span>
+                            </div>
+                        </div>
+                        <div class="macros__lista">
+                            @Macro("Proteína", _dia.Total.Proteina, _dia.Metas.ProteinaG)
+                            @Macro("Carboidrato", _dia.Total.Carboidrato, _dia.Metas.CarboidratoG)
+                            @Macro("Gordura", _dia.Total.Gordura, _dia.Metas.GorduraG)
+                        </div>
+                    </div>
+                    @if (_dia.GastoTreinoKcal > 0)
+                    {
+                        <p class="dados__dica">
+                            @(EhHoje ? "Treino de hoje" : "Treino do dia"): gasto de ≈ @N(_dia.GastoTreinoKcal) kcal@(_dia.Metas.Kcal > 0 ? $". Meta do dia: {N(_dia.Metas.Kcal)} + {N(_dia.MetaKcalDoDia - _dia.Metas.Kcal)} do treino." : ".")
+                        </p>
+                    }
+                    @if (_dia.Metas.Kcal == 0 && _dia.GastoTreinoKcal == 0)
+                    {
+                        <p class="dados__dica">Defina metas em <a href="@Nav.GetUriWithQueryParameter("aba", "metas")">Metas</a> para acompanhar o dia.</p>
+                    }
+                    <div class="agua">
+                        <div class="copo" role="img" aria-label="@RotuloCopo">
+                            <div class="copo__agua" style="height:@Largura(_dia.AguaMl, _dia.MetaAguaMl)"></div>
+                        </div>
+                        <div class="agua__texto">
+                            <span class="agua__rotulo">Água</span>
+                            <span class="macro__valor">@((_dia.AguaMl / 1000.0).ToString("0.0", PtBr))@(_dia.MetaAguaMl > 0 ? $" / {(_dia.MetaAguaMl / 1000.0).ToString("0.0", PtBr)}" : "") L</span>
+                        </div>
+                        @if (EhHoje)
+                        {
+                            <div class="agua-rapida" role="group" aria-label="Somar água">
+                                @foreach (var ml in AguaRapida.Copos)
+                                {
+                                    <button type="button" class="pilula pilula--pequena" @onclick="() => AguaRapida.RegistrarAsync(Servico, Eventos, ml)">+@ml</button>
+                                }
+                            </div>
+                        }
+                    </div>
+                </section>
+
+                @foreach (var r in _dia.Refeicoes)
+                {
+                    var aberta = _adicionando == r.Refeicao;
+                    var expandida = aberta || _abertas.Contains(r.Refeicao);
+                    if (r.Plano.Count == 0 && r.Consumido.Count == 0 && !aberta && !_mostrarTodas && r.Refeicao is Refeicao.LancheManha or Refeicao.Ceia) continue;
+                    <section class="cartao refeicao" aria-label="@r.Nome" @key="r.Refeicao">
+                        <button type="button" class="refeicao__cabeca" aria-expanded="@expandida" @onclick="() => AlternarRefeicao(r.Refeicao)">
+                            <span class="refeicao__nome"><Icone Nome="@IconeRefeicao(r.Refeicao)" Tamanho="18" /> @r.Nome</span>
+                            <span class="dados__meta refeicao__resumo">@ResumoRefeicao(r)</span>
+                            <span class="refeicao__kcal">@N(r.TotalConsumido.Kcal) kcal</span>
+                            <svg class="extrato__seta @(expandida ? "extrato__seta--aberta" : "")" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
+                        </button>
+                        @if (expandida)
+                        {
+
+                        @if (r.Plano.Count > 0)
+                        {
+                            <div class="refeicao__plano">
+                                <span class="dados__meta">Plano: @string.Join(", ", r.Plano.Select(p => $"{p.Alimento} {p.Gramas} g")) · @N(r.TotalPlano.Kcal) kcal</span>
+                                @if (r.SeguiuPlano)
+                                {
+                                    <span class="chip chip--ok">✓ seguiu o plano</span>
+                                }
+                                else
+                                {
+                                    <button type="button" class="botao botao--pequeno" @onclick="() => SeguirPlano(r.Refeicao)">Segui o plano</button>
+                                }
+                            </div>
+                        }
+
+                        @if (r.Consumido.Count > 0)
+                        {
+                            <ul class="refeicao__itens">
+                                @foreach (var c in r.Consumido)
+                                {
+                                    <li @key="c.Id">
+                                        <span class="refeicao__alimento">@c.Alimento</span>
+                                        <span class="dados__meta">@c.Gramas g · P @c.Macros.Proteina.ToString("0", PtBr) g</span>
+                                        <span class="refeicao__item-kcal">@N(c.Macros.Kcal) kcal</span>
+                                        <button type="button" class="botao-icone botao-icone--discreto" aria-label="Remover @c.Alimento" @onclick="() => RemoverConsumo(c.Id)">
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+                                        </button>
+                                    </li>
+                                }
+                            </ul>
+                        }
+
+                        @if (!aberta && r.Consumido.Count == 0 && ItensDoDiaAnterior(r.Refeicao) is { Count: > 0 } anterior)
+                        {
+                            <button type="button" class="botao botao--pequeno refeicao__copiar" @onclick="() => CopiarDoDiaAnterior(r.Refeicao)">
+                                Copiar de @(EhHoje ? "ontem" : _data.AddDays(-1).ToString("dd/MM")) · @N(anterior.Sum(i => i.Macros.Kcal)) kcal
+                            </button>
+                            <span class="dados__meta refeicao__copiar-itens">@string.Join(", ", anterior.Take(3).Select(i => i.Alimento))@(anterior.Count > 3 ? "…" : "")</span>
+                        }
+
+                        @if (aberta)
+                        {
+                            <BuscaAlimento Recentes="_recentes" AoEscolher="(x) => AdicionarConsumo(r.Refeicao, x)" />
+                            <button type="button" class="botao botao--fantasma botao--pequeno refeicao__fechar" @onclick="() => _adicionando = null">Fechar</button>
+                        }
+                        else
+                        {
+                            <button type="button" class="botao botao--fantasma botao--pequeno refeicao__adicionar" @onclick="() => _adicionando = r.Refeicao">+ Adicionar</button>
+                        }
+                        }
+                    </section>
+                }
+                @if (!_mostrarTodas)
+                {
+                    <button type="button" class="botao botao--fantasma botao--pequeno" @onclick="() => _mostrarTodas = true">Incluir lanche da manhã e ceia</button>
+                }
+                <p class="dados__dica">Por <AtalhoCaptura />: <em>comi 150g de arroz no almoço</em>, <em>tomei 300 ml de leite</em>.</p>
+            </div>
+
+            <aside class="cartao peso so-pc" aria-labelledby="t-peso">
+                <h2 id="t-peso" class="rotulo">Peso</h2>
+                @if (_pesos?.Atual is { } atual)
+                {
+                    <div class="orcamento__linha">
+                        <span class="resumo__valor">@atual.Kg.ToString("0.0", PtBr) kg</span>
+                        <span class="orcamento__de">em @atual.Data.ToString("dd/MM")</span>
+                    </div>
+                    @if (_pesos.Variacao30Dias is { } v)
+                    {
+                        <span class="resumo__detalhe">@(v > 0 ? "+" : v < 0 ? "−" : "")@Math.Abs(v).ToString("0.0", PtBr) kg em ~30 dias</span>
+                    }
+                }
+                @if ((_pesos?.Pontos.Count ?? 0) >= 2)
+                {
+                    <GraficoLinha Pontos="@((_pesos?.Pontos ?? []).Select(p => new GraficoLinha.Ponto(p.Data, p.Kg)).ToList())" Unidade="kg"
+                                  Rotulo="Peso nos últimos 90 dias" Vazio="Registre o peso para ver a evolução." />
+                }
+                else
+                {
+                    <p class="dados__dica">@(_pesos?.Atual is null ? "Registre o peso para ver a evolução." : "A evolução aparece a partir da segunda pesagem.")</p>
+                }
+                <div class="peso__registrar">
+                    <label class="mini mini--largo"><span>Peso de hoje (kg)</span>
+                        <input type="number" min="20" max="400" step="0.1" inputmode="decimal" @bind="_pesoHoje" @bind:event="oninput" @onkeydown="AoTeclarPeso" />
+                    </label>
+                    <button type="button" class="botao botao--pequeno" disabled="@(_pesoHoje is null)" @onclick="RegistrarPeso">Salvar</button>
+                </div>
+            </aside>
+        </div>
+    }
+    else if (Aba == "compras")
+    {
+        <a class="compras__voltar" href="@Nav.GetUriWithQueryParameter("aba", "plano")">← Voltar ao plano</a>
+        <ListaCompras />
+    }
+    else if (Aba == "plano")
+    {
+        <p class="dados__dica">O plano é o que você pretende comer em cada refeição. No dia, um clique em "Segui o plano" registra tudo.</p>
+        <a class="botao botao--pequeno compras__abrir" href="@Nav.GetUriWithQueryParameter("aba", "compras")">Lista de compras</a>
+        <section class="cartao macros" aria-label="Total do plano">
+            <div class="macros__kcal">
+                <span class="resumo__valor">@N(_dia.TotalPlano.Kcal)</span>
+                <span class="orcamento__de">kcal no plano@(_dia.Metas.Kcal > 0 ? $" · meta {N(_dia.Metas.Kcal)}" : "")</span>
+            </div>
+            <div class="macros__lista">
+                @Macro("Proteína", _dia.TotalPlano.Proteina, _dia.Metas.ProteinaG)
+                @Macro("Carboidrato", _dia.TotalPlano.Carboidrato, _dia.Metas.CarboidratoG)
+                @Macro("Gordura", _dia.TotalPlano.Gordura, _dia.Metas.GorduraG)
+            </div>
+        </section>
+        @foreach (var r in _dia.Refeicoes)
+        {
+            if (r.Plano.Count == 0 && _planoAberto != r.Refeicao)
+            {
+                var vazia = r.Refeicao;
+                <div class="refeicao-vazia" @key="r.Refeicao">
+                    <span class="refeicao__nome"><Icone Nome="@IconeRefeicao(r.Refeicao)" Tamanho="18" /> @r.Nome</span>
+                    <button type="button" class="botao botao--pequeno botao--fantasma" aria-label="Adicionar ao plano: @r.Nome" @onclick="() => _planoAberto = vazia">+ Adicionar</button>
+                </div>
+                continue;
+            }
+            <section class="cartao refeicao" aria-label="Plano: @r.Nome" @key="r.Refeicao">
+                <div class="refeicao__topo">
+                    <h2 class="refeicao__nome"><Icone Nome="@IconeRefeicao(r.Refeicao)" Tamanho="18" /> @r.Nome</h2>
+                    <span class="refeicao__kcal">@N(r.TotalPlano.Kcal) kcal</span>
+                </div>
+                @if (r.Plano.Count > 0)
+                {
+                    <ul class="refeicao__itens">
+                        @foreach (var p in r.Plano)
+                        {
+                            <li @key="p.Id">
+                                <span class="refeicao__alimento">@p.Alimento</span>
+                                <span class="dados__meta">@p.Gramas g · P @p.Macros.Proteina.ToString("0", PtBr) g</span>
+                                <span class="refeicao__item-kcal">@N(p.Macros.Kcal) kcal</span>
+                                <button type="button" class="botao-icone botao-icone--discreto" aria-label="Tirar @p.Alimento do plano" @onclick="() => RemoverDoPlano(p.Id)">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+                                </button>
+                            </li>
+                        }
+                    </ul>
+                }
+                <BuscaAlimento TextoBotao="Adicionar" Placeholder="Adicionar ao plano (ex.: ovo, aveia)" AoEscolher="(x) => AdicionarAoPlano(r.Refeicao, x)" />
+            </section>
+        }
+    }
+    else if (Aba == "alimentos")
+    {
+        <section class="cartao dados__bloco" aria-labelledby="t-novo-alimento">
+            <h2 id="t-novo-alimento" class="rotulo">Cadastrar alimento</h2>
+            <p class="dados__dica">A base já tem cerca de 590 alimentos da Tabela TACO (UNICAMP). Cadastre o que faltar: um produto, uma receita sua, um suplemento. Valores por 100 g (veja o rótulo).</p>
+            <div class="campo-linha">
+                <div class="campo"><label for="a-nome">Nome</label><input id="a-nome" type="text" placeholder="Whey da marca X" @bind="_novo.Nome" /></div>
+            </div>
+            <div class="campo-linha">
+                <div class="campo"><label for="a-kcal">Kcal</label><input id="a-kcal" type="number" min="0" step="1" @bind="_novo.Kcal" /></div>
+                <div class="campo"><label for="a-p">Proteína (g)</label><input id="a-p" type="number" min="0" step="0.1" @bind="_novo.Proteina" /></div>
+                <div class="campo"><label for="a-c">Carboidrato (g)</label><input id="a-c" type="number" min="0" step="0.1" @bind="_novo.Carboidrato" /></div>
+                <div class="campo"><label for="a-g">Gordura (g)</label><input id="a-g" type="number" min="0" step="0.1" @bind="_novo.Gordura" /></div>
+            </div>
+            <div class="campo-linha">
+                <div class="campo"><label for="a-porcao">Porção (opcional)</label><input id="a-porcao" type="text" placeholder="unidade, scoop, fatia" @bind="_novo.NomePorcao" /></div>
+                <div class="campo"><label for="a-porcao-g">Gramas da porção</label><input id="a-porcao-g" type="number" min="1" @bind="_novo.GramasPorcao" /></div>
+            </div>
+            @if (_erroAlimento is not null)
+            {
+                <p class="captura__aviso" role="alert">@_erroAlimento</p>
+            }
+            <div class="dados__acoes"><button type="button" class="botao botao--primario" @onclick="SalvarAlimento">Salvar alimento</button></div>
+        </section>
+
+        <section class="cartao dados__bloco" aria-labelledby="t-consultar">
+            <h2 id="t-consultar" class="rotulo">Consultar a base</h2>
+            <div class="busca">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
+                <label class="so-leitor" for="consulta">Buscar</label>
+                <input id="consulta" type="search" placeholder="Ex.: feijão, peito de frango, iogurte" @bind="_consulta" @bind:event="oninput" @bind:after="Consultar" />
+            </div>
+            @if (_consultados.Count > 0)
+            {
+                <table class="tabela">
+                    <thead><tr><th>Alimento (100 g)</th><th>Kcal</th><th>Prot.</th><th>Carb.</th><th>Gord.</th></tr></thead>
+                    <tbody>
+                        @foreach (var a in _consultados)
+                        {
+                            <tr><td>@a.Nome <span class="dados__meta">@(a.Marca is null ? a.Fonte : $"{a.Marca} · {a.Fonte}")</span></td><td>@a.Kcal.ToString("0")</td><td>@a.Proteina.ToString("0.#", PtBr)</td><td>@a.Carboidrato.ToString("0.#", PtBr)</td><td>@a.Gordura.ToString("0.#", PtBr)</td></tr>
+                        }
+                    </tbody>
+                </table>
+            }
+            <p class="dados__meta">Fontes: TACO, 4ª edição (NEPA/UNICAMP); IBGE, Tabelas de Composição Nutricional dos Alimentos Consumidos no Brasil (POF 2008-2009); Open Food Facts (ODbL), para produtos com marca salvos na busca. "Meu" = cadastrado por você.</p>
+        </section>
+    }
+    else
+    {
+        <section class="cartao dados__bloco" aria-labelledby="t-metas">
+            <h2 id="t-metas" class="rotulo">Metas diárias</h2>
+            <p class="dados__dica">Deixe 0 para não acompanhar. Se não sabe por onde começar, um nutricionista define isso melhor do que qualquer fórmula.</p>
+            <div class="campo-linha">
+                <div class="campo"><label for="m-kcal">Calorias em dia sem treino (kcal)</label><input id="m-kcal" type="number" min="0" step="50" @bind="_metas.Kcal" /></div>
+                <div class="campo"><label for="m-p">Proteína (g)</label><input id="m-p" type="number" min="0" step="5" @bind="_metas.Proteina" /></div>
+                <div class="campo"><label for="m-c">Carboidrato (g)</label><input id="m-c" type="number" min="0" step="5" @bind="_metas.Carboidrato" /></div>
+                <div class="campo"><label for="m-g">Gordura (g)</label><input id="m-g" type="number" min="0" step="5" @bind="_metas.Gordura" /></div>
+            </div>
+            <h2 class="rotulo">Treino</h2>
+            <div class="campo-linha">
+                <div class="campo"><label for="m-t">Treinos por semana</label><input id="m-t" type="number" min="0" max="14" @bind="_metas.Treinos" /></div>
+                <div class="campo"><label for="m-comp">Gasto do treino somado à meta (%)</label><input id="m-comp" type="number" min="0" max="100" step="10" @bind="_metas.Compensacao" /></div>
+            </div>
+            <p class="dados__dica">Nos dias de treino, a meta de calorias sobe pelo gasto estimado do treino (100% soma tudo; use menos se quiser ser mais conservador).</p>
+            <div class="dados__acoes"><button type="button" class="botao botao--primario" @onclick="SalvarMetas">Salvar metas</button></div>
+        </section>
+    }
+</main>
+
+@code {
+    [SupplyParameterFromQuery(Name = "aba")] public string? AbaQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "peso")] public string? PesoQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "dia")] public string? DiaQuery { get; set; }
+
+    private DateOnly _data = EventosFavoa.Hoje;
+    private bool EhHoje => _data == EventosFavoa.Hoje;
+
+    private string LinkDia(DateOnly d) => Nav.GetUriWithQueryParameter("dia", d == EventosFavoa.Hoje ? null : d.ToString("yyyy-MM-dd"));
+
+    private string RotuloDia() => (EventosFavoa.Hoje.DayNumber - _data.DayNumber) switch
+    {
+        0 => "Hoje",
+        1 => "Ontem",
+        2 => "Anteontem",
+        _ => PtBr.DateTimeFormat.GetDayName(_data.DayOfWeek) + ", " + _data.ToString("dd/MM", PtBr),
+    };
+
+    private void AoEscolherDia(ChangeEventArgs e)
+    {
+        if (DateOnly.TryParse(e.Value?.ToString(), out var d) && d <= EventosFavoa.Hoje)
+            Nav.NavigateTo(LinkDia(d));
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var novo = DateOnly.TryParseExact(DiaQuery, "yyyy-MM-dd", out var d) && d <= EventosFavoa.Hoje ? d : EventosFavoa.Hoje;
+        if (novo != _data || _dia is null) { _data = novo; if (_dia is not null) await Recarregar(); }
+        if (PesoQuery == "1") _pesoAberto = true; // vem do atalho "Peso" da Home
+    }
+
+    private static readonly CultureInfo PtBr = new("pt-BR");
+    private Refeicao? _planoAberto;
+
+    private static readonly (string Chave, string Rotulo)[] Abas = [("hoje", "Hoje"), ("plano", "Plano"), ("alimentos", "Alimentos"), ("metas", "Metas")];
+    private string Aba => AbaQuery == "compras" ? "compras" : Abas.Any(a => a.Chave == AbaQuery) ? AbaQuery! : "hoje";
+
+    private sealed class NovoAlimento
+    {
+        public string Nome { get; set; } = "";
+        public double Kcal { get; set; }
+        public double Proteina { get; set; }
+        public double Carboidrato { get; set; }
+        public double Gordura { get; set; }
+        public string? NomePorcao { get; set; }
+        public int? GramasPorcao { get; set; }
+    }
+
+    private sealed class MetasForm
+    {
+        public int Kcal { get; set; }
+        public int Proteina { get; set; }
+        public int Carboidrato { get; set; }
+        public int Gordura { get; set; }
+        public int Treinos { get; set; }
+        public int Compensacao { get; set; } = 100;
+    }
+
+    private DiaDieta? _dia;
+    private HistoricoPeso? _pesos;
+    private Refeicao? _adicionando;
+    private readonly HashSet<Refeicao> _abertas = [];
+
+    private void AlternarRefeicao(Refeicao r)
+    {
+        if (_abertas.Remove(r)) { if (_adicionando == r) _adicionando = null; }
+        else _abertas.Add(r);
+    }
+
+    private static string ResumoRefeicao(RefeicaoDia r)
+    {
+        if (r.Consumido.Count > 0) return r.Consumido.Count == 1 ? "1 item" : $"{r.Consumido.Count} itens";
+        if (r.Plano.Count > 0) return r.SeguiuPlano ? "seguiu o plano" : "tem plano";
+        return "vazia";
+    }
+    private bool _mostrarTodas;
+    private decimal? _pesoHoje;
+    private bool _pesoAberto;
+    private NovoAlimento _novo = new();
+    private string? _erroAlimento;
+    private string _consulta = "";
+    private IReadOnlyList<AlimentoResumo> _consultados = [];
+    private MetasForm _metas = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        Eventos.RegistroSalvo += Recarregar;
+        await Recarregar();
+        var m = _dia!.Metas;
+        _metas = new MetasForm { Kcal = m.Kcal, Proteina = m.ProteinaG, Carboidrato = m.CarboidratoG, Gordura = m.GorduraG, Treinos = m.TreinosSemana, Compensacao = m.CompensacaoTreinoPct };
+    }
+
+    private DiaDieta? _anterior;
+    private IReadOnlyList<AlimentoRecente> _recentes = [];
+
+    private IReadOnlyList<ItemRefeicao>? ItensDoDiaAnterior(Refeicao r) => _anterior?.Refeicoes.FirstOrDefault(x => x.Refeicao == r)?.Consumido;
+
+    private async Task CopiarDoDiaAnterior(Refeicao r) => await Notificar(await Fitness.CopiarRefeicaoAsync(_data.AddDays(-1), _data, r));
+
+    private async Task Recarregar()
+    {
+        _anterior = await Fitness.ObterDiaDietaAsync(_data.AddDays(-1));
+        _recentes = await Fitness.ObterAlimentosRecentesAsync(EventosFavoa.Hoje);
+        _dia = await Fitness.ObterDiaDietaAsync(_data);
+        _pesos = await Fitness.ObterPesosAsync(90, EventosFavoa.Hoje);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private RenderFragment Macro(string nome, double valor, double meta, string unidade = "g") => __builder =>
+    {
+        <div class="macro">
+            <div class="macro__linha"><span>@nome</span><span class="macro__valor">@valor.ToString(unidade == "L" ? "0.0" : "0", PtBr)@(meta > 0 ? $" / {meta.ToString(unidade == "L" ? "0.0" : "0", PtBr)}" : "") @unidade</span></div>
+            @if (meta > 0)
+            {
+                <span class="fatia__barra" aria-hidden="true"><span style="width:@Largura(valor, meta)"></span></span>
+                @if (EhHoje && valor < meta && nome == "Proteína")
+                {
+                    <span class="macro__falta">faltam @((meta - valor).ToString("0", PtBr)) g</span>
+                }
+            }
+        </div>
+    };
+
+    // ---------- Ações ----------
+
+    private async Task Notificar(Favoa.Core.ResultadoRegistro r)
+    {
+        Eventos.MostrarMensagem(r.Mensagem, r.Sucesso ? r.Criado : null);
+        if (r.Sucesso) await Eventos.NotificarRegistroSalvoAsync();
+    }
+
+    private async Task AdicionarConsumo(Refeicao refeicao, (AlimentoResumo Alimento, int Gramas) x) =>
+        await Notificar(await Fitness.AdicionarConsumoAsync(_data, refeicao, x.Alimento.Id, x.Gramas));
+
+    private async Task RemoverConsumo(Guid id) => await Notificar(await Fitness.RemoverConsumoAsync(id));
+
+    private async Task SeguirPlano(Refeicao refeicao) => await Notificar(await Fitness.SeguirPlanoAsync(_data, refeicao));
+
+    private async Task AdicionarAoPlano(Refeicao refeicao, (AlimentoResumo Alimento, int Gramas) x) =>
+        await Notificar(await Fitness.AdicionarItemPlanoAsync(refeicao, x.Alimento.Id, x.Gramas));
+
+    private async Task RemoverDoPlano(Guid id) => await Notificar(await Fitness.RemoverItemPlanoAsync(id));
+
+    private async Task RegistrarPeso()
+    {
+        if (_pesoHoje is not { } kg) return;
+        var r = await Fitness.RegistrarPesoAsync(_data, kg);
+        if (r.Sucesso) { _pesoHoje = null; _pesoAberto = false; }
+        await Notificar(r);
+    }
+
+    private async Task AoTeclarPeso(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await RegistrarPeso();
+    }
+
+    private async Task SalvarAlimento()
+    {
+        var r = await Fitness.SalvarAlimentoAsync(new AlimentoEdicao(null, _novo.Nome, _novo.Kcal, _novo.Proteina, _novo.Carboidrato, _novo.Gordura, _novo.NomePorcao, _novo.GramasPorcao));
+        if (!r.Sucesso) { _erroAlimento = r.Mensagem; return; }
+        _erroAlimento = null;
+        _consulta = _novo.Nome;
+        _novo = new();
+        Eventos.MostrarMensagem(r.Mensagem);
+        await Consultar();
+    }
+
+    private async Task Consultar() =>
+        _consultados = _consulta.Trim().Length < 2 ? [] : await Fitness.BuscarAlimentosAsync(_consulta, 25);
+
+    private async Task SalvarMetas()
+    {
+        await Fitness.SalvarMetasAsync(new MetasFitness(_metas.Kcal, _metas.Proteina, _metas.Carboidrato, _metas.Gordura, _metas.Treinos, Math.Clamp(_metas.Compensacao, 0, 100)));
+        Eventos.MostrarMensagem("Metas salvas.");
+        await Eventos.NotificarRegistroSalvoAsync();
+    }
+
+    // ---------- Texto ----------
+
+    private static string N(double v) => v.ToString("N0", PtBr);
+
+    // Últimos 30 pontos de peso como linha pequena (null com menos de 2 registros).
+    private string? Tendencia
+    {
+        get
+        {
+            var pts = _pesos?.Pontos.TakeLast(30).ToList();
+            if (pts is null || pts.Count < 2) return null;
+            var min = pts.Min(p => (double)p.Kg); var max = pts.Max(p => (double)p.Kg);
+            var faixa = Math.Max(max - min, 0.5);
+            var partes = new List<string>();
+            for (var i = 0; i < pts.Count; i++)
+            {
+                var x = i * 100.0 / (pts.Count - 1);
+                var y = 26 - ((double)pts[i].Kg - min) / faixa * 24;
+                partes.Add(x.ToString("0.#", CultureInfo.InvariantCulture) + "," + y.ToString("0.#", CultureInfo.InvariantCulture));
+            }
+            return string.Join(" ", partes);
+        }
+    }
+
+    private string RotuloCopo => $"Água: {(_dia.AguaMl / 1000.0).ToString("0.0", PtBr)} de {(_dia.MetaAguaMl / 1000.0).ToString("0.0", PtBr)} litros";
+
+    private string AnelTraco
+    {
+        get
+        {
+            var f = _dia is null || _dia.MetaKcalDoDia <= 0 ? 0 : Math.Clamp(_dia.Total.Kcal / (double)_dia.MetaKcalDoDia, 0, 1) * 100;
+            return $"{f.ToString("0.#", CultureInfo.InvariantCulture)} 100";
+        }
+    }
+
+    private static string IconeRefeicao(Refeicao r)
+    {
+        if (r == Refeicao.CafeDaManha) return "cafe";
+        if (r == Refeicao.Almoco) return "almoco";
+        if (r == Refeicao.Jantar || r == Refeicao.Ceia) return "noite";
+        return "lanche";
+    }
+
+    private static string Pct(double v, double meta) => meta <= 0 ? "" : $"{v / meta * 100:0}%";
+
+    private static string Largura(double v, double meta) =>
+        meta <= 0 ? "0%" : (Math.Clamp(v / meta, 0, 1) * 100).ToString("0.#", CultureInfo.InvariantCulture) + "%";
+
+    public void Dispose() => Eventos.RegistroSalvo -= Recarregar;
+}

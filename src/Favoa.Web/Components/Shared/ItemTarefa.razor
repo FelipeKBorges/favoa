@@ -1,0 +1,100 @@
+@using Favoa.Core.Edicao
+@using Favoa.Core.Rotina
+@inject EventosFavoa Eventos
+
+<li class="item-tarefa @(Item.Concluida ? "item-tarefa--feita" : "") @(Item.Atrasada ? "item-tarefa--atrasada" : "")">
+    <div class="item-tarefa__linha">
+        <label class="item-tarefa__marcar">
+            <input type="checkbox" checked="@Item.Concluida" @onchange="() => AoAlternar.InvokeAsync(Item)"
+                   aria-label="@(Item.Concluida ? $"Desmarcar {Item.Titulo}" : $"Concluir {Item.Titulo}")" />
+        </label>
+        <button type="button" class="item-tarefa__titulo" @onclick="Editar" aria-label="Editar @Item.Titulo">@Item.Titulo</button>
+
+        @if (Item.Hora is { } hora && !Item.Concluida)
+        {
+            <span class="item-tarefa__hora" title="@(Item.AvisoMinutos is { } av ? "Lembrete: " + AvisoTarefa.Rotulo(av).ToLowerInvariant() : "Sem lembrete")">
+                @if (Item.AvisoMinutos is not null)
+                {
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 16V11a6 6 0 0112 0v5l2 2H4z" /><path d="M10 21h4" /></svg>
+                    <span class="so-leitor">Com lembrete,</span>
+                }
+                @hora.ToString("HH:mm")
+            </span>
+        }
+        @if (Item.Responsaveis.Count > 0)
+        {
+            <span class="item-tarefa__pessoas" aria-label="@("Quem faz: " + string.Join(", ", Item.Responsaveis.Select(p => p.Nome)))">
+                @foreach (var p in Item.Responsaveis)
+                {
+                    <span class="avatar avatar--mini" style="--cor-pessoa: @p.Cor" title="@p.Nome" aria-hidden="true">@p.Inicial</span>
+                }
+            </span>
+        }
+
+        @if (!Item.Concluida)
+        {
+            <button type="button" class="item-tarefa__prazo" aria-expanded="@_aberto" aria-label="Mudar prazo de @Item.Titulo"
+                    @onclick="() => _aberto = !_aberto">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="3" /><path d="M8 3v4M16 3v4M4 10h16" /></svg>
+                <span>@TextoPrazo</span>
+            </button>
+        }
+        else if (Item.ConcluidaEm is { } feita)
+        {
+            <span class="item-tarefa__quando">feita @Relativo(feita)</span>
+        }
+    </div>
+
+    @if (_aberto)
+    {
+        <div class="item-tarefa__atalhos" role="group" aria-label="Novo prazo">
+            @foreach (var a in AtalhosPrazo.Para(Hoje))
+            {
+                <button type="button" class="chip-botao @(a.Prazo == Item.Prazo ? "chip-botao--ativo" : "")" @onclick="() => Mudar(a.Prazo)">@a.Rotulo</button>
+            }
+            <label class="chip-botao chip-botao--data">
+                <span class="so-leitor">Escolher data</span>
+                <input type="date" value="@Item.Prazo?.ToString("yyyy-MM-dd")" @onchange="AoEscolherData" />
+            </label>
+        </div>
+    }
+</li>
+
+@code {
+    [Parameter, EditorRequired] public TarefaItem Item { get; set; } = null!;
+    [Parameter, EditorRequired] public DateOnly Hoje { get; set; }
+    [Parameter] public EventCallback<TarefaItem> AoAlternar { get; set; }
+    [Parameter] public EventCallback<(TarefaItem Item, DateOnly? Prazo)> AoMudarPrazo { get; set; }
+
+    private bool _aberto;
+
+    private string TextoPrazo => Item.Prazo is { } p ? Relativo(p) : "sem prazo";
+
+    private string Relativo(DateOnly dia)
+    {
+        var diff = dia.DayNumber - Hoje.DayNumber;
+        return diff switch
+        {
+            0 => "hoje",
+            1 => "amanhã",
+            -1 => "ontem",
+            > 1 and < 7 => dia.ToString("dddd", new System.Globalization.CultureInfo("pt-BR")).Replace("-feira", ""),
+            < -1 and > -7 => $"há {-diff} dias",
+            _ => dia.ToString("dd/MM"),
+        };
+    }
+
+    private async Task Mudar(DateOnly? prazo)
+    {
+        _aberto = false;
+        await AoMudarPrazo.InvokeAsync((Item, prazo));
+    }
+
+    private async Task AoEscolherData(ChangeEventArgs e)
+    {
+        if (DateOnly.TryParse(e.Value?.ToString(), System.Globalization.CultureInfo.InvariantCulture, out var d))
+            await Mudar(d);
+    }
+
+    private void Editar() => Eventos.SolicitarEdicao(new ReferenciaRegistro(TipoReferencia.Tarefa, Item.Id));
+}

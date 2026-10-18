@@ -1,0 +1,26 @@
+@inject IJSRuntime Js
+
+<div class="tema" role="radiogroup" aria-label="Aparência">
+    @foreach (var (chave, rotulo) in Opcoes)
+    {
+        <button type="button" role="radio" aria-checked="@(_atual == chave)"
+                class="segmento__opcao @(_atual == chave ? "segmento__opcao--ativa" : "")" @onclick="() => Escolher(chave)">@rotulo</button>
+    }
+</div>
+
+@code {
+    private static readonly (string Chave, string Rotulo)[] Opcoes = [("escuro", "Escuro"), ("claro", "Claro"), ("auto", "Automático")];
+    private string _atual = "escuro";
+
+    protected override async Task OnAfterRenderAsync(bool primeira)
+    {
+        if (!primeira) return;
+        try { _atual = await Js.InvokeAsync<string>("favoaTema.atual"); StateHasChanged(); } catch { }
+    }
+
+    private async Task Escolher(string chave)
+    {
+        _atual = chave;
+        try { await Js.InvokeVoidAsync("favoaTema.definir", chave); } catch { }
+    }
+}

@@ -1,0 +1,109 @@
+@using System.Globalization
+@* Constância: um quadrinho por dia, colunas = semanas (seg a dom). Quanto mais mel, mais cheia a colmeia ficou.
+   Escala de uma cor só (âmbar), validada contra a superfície escura. Dia sem registro = só o contorno. *@
+
+<figure class="mapa" aria-label="Constância dos últimos meses">
+    <svg viewBox="0 0 @F(Largura) @F(Altura)" role="img" aria-label="@Descricao">
+        @foreach (var (semana, rotulo) in Meses)
+        {
+            <SvgTexto X="@F(Esq + semana * Passo)" Y="10" Classe="mapa__eixo">@rotulo</SvgTexto>
+        }
+        @foreach (var (linha, rotulo) in RotulosDias)
+        {
+            <SvgTexto X="0" Y="@F(Topo + linha * Passo + Lado - 2)" Classe="mapa__eixo">@rotulo</SvgTexto>
+        }
+
+        @for (var s = 0; s < Semanas; s++)
+        {
+            for (var d = 0; d < 7; d++)
+            {
+                var data = Inicio.AddDays(s * 7 + d);
+                if (data > Hoje) continue;
+                var p = Progresso(data);
+                var dataLocal = data;
+                <rect x="@F(Esq + s * Passo)" y="@F(Topo + d * Passo)" width="@F(Lado)" height="@F(Lado)" rx="3"
+                      class="mapa__dia mapa__dia--@Nivel(p) @(data == Selecionado ? "mapa__dia--selecionado" : "")"
+                      @onclick="() => AoEscolher.InvokeAsync(dataLocal)">
+                    <title>@Dica(data, p)</title>
+                </rect>
+            }
+        }
+    </svg>
+    <figcaption class="mapa__legenda">
+        <span class="mapa__chave"><svg width="12" height="12" aria-hidden="true"><rect x="0.5" y="0.5" width="11" height="11" rx="3" class="mapa__dia mapa__dia--vazio" /></svg> sem registro</span>
+        <span class="mapa__escala">
+            menos
+            @foreach (var n in Niveis)
+            {
+                <svg width="12" height="12" aria-hidden="true"><rect width="12" height="12" rx="3" class="mapa__dia mapa__dia--@n" /></svg>
+            }
+            mais
+        </span>
+    </figcaption>
+</figure>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<ProgressoDia?> Dias { get; set; } = [];
+    /// <summary>Data do primeiro elemento de <see cref="Dias"/> (uma segunda-feira).</summary>
+    [Parameter, EditorRequired] public DateOnly Inicio { get; set; }
+    [Parameter, EditorRequired] public DateOnly Hoje { get; set; }
+    [Parameter] public DateOnly? Selecionado { get; set; }
+    [Parameter] public EventCallback<DateOnly> AoEscolher { get; set; }
+
+    private static readonly (int, string)[] RotulosDias = [(0, "seg"), (2, "qua"), (4, "sex")];
+    private static readonly int[] Niveis = [1, 2, 3, 4];
+    private const double Lado = 13, Passo = 16, Esq = 30, Topo = 16;
+    private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
+    private static readonly CultureInfo PtBr = new("pt-BR");
+
+    private int Semanas => (Hoje.DayNumber - Inicio.DayNumber) / 7 + 1;
+    private double Largura => Esq + Semanas * Passo;
+    private double Altura => Topo + 7 * Passo;
+
+    private ProgressoDia? Progresso(DateOnly d)
+    {
+        var i = d.DayNumber - Inicio.DayNumber;
+        return i >= 0 && i < Dias.Count ? Dias[i] : null;
+    }
+
+    public static string Nivel(ProgressoDia? p)
+    {
+        if (p is null) return "vazio";
+        if (p.Geral >= 0.75) return "4";
+        if (p.Geral >= 0.5) return "3";
+        return p.Geral >= 0.25 ? "2" : "1";
+    }
+
+    private IEnumerable<(int, string)> Meses
+    {
+        get
+        {
+            var ultimo = -1;
+            for (var s = 0; s < Semanas; s++)
+            {
+                var d = Inicio.AddDays(s * 7);
+                var mes = d.AddDays(6).Month; // a semana pertence ao mês em que termina
+                if (mes == ultimo) continue;
+                ultimo = mes;
+                if (s > Semanas - 2) continue; // rótulo sem espaço no fim
+                yield return (s, d.AddDays(6).ToString("MMM", PtBr).TrimEnd('.'));
+            }
+        }
+    }
+
+    private string Descricao
+    {
+        get
+        {
+            var com = Dias.Where(p => p is not null).ToList();
+            if (com.Count == 0) return "Constância: ainda sem registros.";
+            var cheios = com.Count(p => p!.Geral >= 0.75);
+            return $"Constância: {com.Count} dias com registro, {cheios} com a colmeia acima de 75%.";
+        }
+    }
+
+    private static string Dica(DateOnly d, ProgressoDia? p) =>
+        d.ToString("ddd, dd/MM", PtBr) + ": " + (p is null ? "sem registro" : p.Percentual + "% da colmeia");
+
+    private static string F(double v) => v.ToString("0.#", Inv);
+}

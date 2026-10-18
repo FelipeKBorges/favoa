@@ -1,0 +1,539 @@
+@page "/treino"
+@using System.Globalization
+@using Favoa.Core.Fitness
+@implements IDisposable
+@inject IFitnessServico Fitness
+@inject EventosFavoa Eventos
+@inject NavigationManager Nav
+
+<PageTitle>Treino · Fávoa</PageTitle>
+
+<main class="modulo modulo--largo">
+    <header class="pagina__topo">
+        <AbasFitness Ativa="treino" />
+        <div class="pagina__titulo">
+            <h1 class="so-leitor">Treino</h1>
+            @if (_painel is not null)
+            {
+                <p class="pagina__resumo"><span>@_painel.TreinosUltimos7Dias de @_painel.MetaSemana treinos nos últimos 7 dias</span></p>
+            }
+        </div>
+        <nav class="segmento" aria-label="Seções do treino">
+            @foreach (var (chave, rotulo) in Abas)
+            {
+                <a class="segmento__opcao @(Aba == chave ? "segmento__opcao--ativa" : "")" aria-current="@(Aba == chave ? "page" : null)"
+                   href="@Nav.GetUriWithQueryParameter("aba", chave == "hoje" ? null : chave)">@rotulo</a>
+            }
+        </nav>
+    </header>
+
+    @if (_painel is null)
+    {
+        <p class="carregando">Carregando…</p>
+    }
+    else if (Aba == "hoje")
+    {
+        @if (_sessao is null)
+        {
+            <section class="cartao treino-inicio">
+                @if (_painel.ProximaFicha is { } prox)
+                {
+                    <div class="rotulo">Próximo na rotação</div>
+                    <h2 class="treino-inicio__titulo">@prox.Nome</h2>
+                    <p class="treino-inicio__itens">@string.Join(" · ", prox.Itens.Select(i => i.Exercicio))</p>
+                    <div class="dados__acoes">
+                        <button type="button" class="botao botao--primario" @onclick="() => Comecar(prox.Id)">Começar @prox.Nome</button>
+                        @foreach (var f in _painel.Fichas.Where(f => f.Id != prox.Id))
+                        {
+                            <button type="button" class="botao" @onclick="() => Comecar(f.Id)">@f.Nome</button>
+                        }
+                        <button type="button" class="botao botao--fantasma" @onclick="() => Comecar(null)">Treino livre</button>
+                    </div>
+                }
+                else
+                {
+                    <div class="rotulo">@(_painel.Recentes.Count == 0 ? "Comece por aqui" : "Registrar um treino")</div>
+                    <p class="vazio">@(_painel.Recentes.Count == 0 ? "Monte suas fichas (Treino A, B, C…) na aba " : "Para ter sugestão de próximo treino, monte suas fichas na aba ")<a href="@Nav.GetUriWithQueryParameter("aba", "fichas")">Fichas</a>@(_painel.Recentes.Count == 0 ? ", ou registre solto:" : ".")</p>
+                    <div class="dados__acoes">
+                        <button type="button" class="botao botao--primario" @onclick="() => Comecar(null)">Treino livre</button>
+                    </div>
+                }
+                <div class="rotulo treino-inicio__sub">Registrar um esporte</div>
+                <div class="dados__acoes treino-inicio__esportes" role="group" aria-label="Esportes">
+                    @foreach (var esporte in Esportes)
+                    {
+                        var nome = esporte;
+                        <button type="button" class="pilula" @onclick="() => ComecarEsporte(nome)"><Icone Nome="@nome" Tamanho="16" /> @nome@(_ultimos.TryGetValue(nome, out var u) ? $" · {u.Minutos} min" : "")</button>
+                    }
+                </div>
+                @if (_painel.Recentes.Count > 0)
+                {
+                    <div class="dados__acoes">
+                        <button type="button" class="botao" @onclick="Repetir">Repetir o último treino (@NomeDia(_painel.Recentes[0].Data).ToLowerInvariant())</button>
+                    </div>
+                }
+                <p class="dados__dica">Também dá por <AtalhoCaptura />: <em>supino 3x10 40kg</em>, <em>corri 5 km em 30 min</em>.</p>
+            </section>
+        }
+        else
+        {
+            <section class="sessao" aria-label="Treino em andamento">
+                <div class="sessao__topo">
+                    <div>
+                        <div class="rotulo">Treino @(_sessao.Data == EventosFavoa.Hoje ? "de hoje" : "de " + NomeDia(_sessao.Data).ToLowerInvariant())</div>
+                        <h2 class="treino-inicio__titulo">@_sessao.Titulo</h2>
+                    </div>
+                    <span class="pagina__resumo">@_sessao.Linhas.Count(l => l.Feito) de @_sessao.Linhas.Count feitos</span>
+                </div>
+
+                @if (_sessao.Linhas.Count == 0)
+                {
+                    <p class="vazio">Adicione os exercícios que fizer abaixo.</p>
+                }
+
+                <ul class="sessao__lista">
+                    @foreach (var (linha, i) in _sessao.Linhas.Select((l, i) => (l, i)))
+                    {
+                        <li class="linha-treino @(linha.Feito ? "linha-treino--feita" : "")" @key="linha">
+                            <label class="linha-treino__marcar">
+                                <input type="checkbox" @bind="linha.Feito" aria-label="@($"{linha.Exercicio} feito")" />
+                            </label>
+                            <div class="linha-treino__corpo">
+                                <div class="linha-treino__nome">
+                                    <span>@linha.Exercicio</span>
+                                    @if (linha.UltimaVez is not null)
+                                    {
+                                        <span class="linha-treino__ultima">última: @linha.UltimaVez</span>
+                                    }
+                                </div>
+                                <div class="linha-treino__campos">
+                                    @if (linha.Tipo == TipoExercicio.Forca)
+                                    {
+                                        <label class="mini"><span>Séries</span><input type="number" min="0" inputmode="numeric" @bind="linha.Series" /></label>
+                                        <label class="mini"><span>Reps</span><input type="number" min="0" inputmode="numeric" @bind="linha.Repeticoes" /></label>
+                                        <label class="mini mini--largo"><span>Carga (kg)</span><input type="number" min="0" step="0.5" inputmode="decimal" @bind="linha.CargaKg" /></label>
+                                    }
+                                    else
+                                    {
+                                        <label class="mini"><span>Min</span><input type="number" min="0" inputmode="numeric" @bind="linha.Minutos" /></label>
+                                        @if (Atv(linha) is not (Atividade.MuayThai or Atividade.Futebol))
+                                        {
+                                            <label class="mini mini--largo"><span>Km</span><input type="number" min="0" step="0.1" inputmode="decimal" @bind="linha.DistanciaKm" /></label>
+                                        }
+                                        @if (GastoCalorico.PedeIntensidade(Atv(linha)))
+                                        {
+                                            <label class="mini"><span>Intensidade</span>
+                                                <select class="seletor" aria-label="@($"Intensidade de {linha.Exercicio}")" @onchange="e => AoMudarIntensidade(linha, e)">
+                                                    <option value="0" selected="@(linha.Intensidade == Intensidade.Leve)">Leve</option>
+                                                    <option value="1" selected="@((linha.Intensidade ?? Intensidade.Moderada) == Intensidade.Moderada)">Moderada</option>
+                                                    <option value="2" selected="@(linha.Intensidade == Intensidade.Intensa)">Intensa</option>
+                                                </select>
+                                            </label>
+                                        }
+                                    }
+                                </div>
+                                @if (KcalLinha(linha) is { } kcalLinha)
+                                {
+                                    <span class="linha-treino__kcal">≈ @kcalLinha kcal</span>
+                                }
+                            </div>
+                            <button type="button" class="botao-icone botao-icone--discreto" aria-label="Tirar @linha.Exercicio" @onclick="() => _sessao.Linhas.RemoveAt(i)">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+                            </button>
+                        </li>
+                    }
+                </ul>
+
+                @if (_sessao.Linhas.Any(l => l.Feito && l.Tipo == TipoExercicio.Forca))
+                {
+                    <div class="sessao__forca">
+                        <label class="mini mini--largo"><span>Musculação (min)</span><input type="number" min="0" inputmode="numeric" placeholder="opcional" @bind="_sessao.MinutosForca" /></label>
+                        <label class="mini"><span>Intensidade</span>
+                            <select class="seletor" aria-label="Intensidade da musculação" @onchange="AoMudarIntensidadeForca">
+                                <option value="0" selected="@(_sessao.IntensidadeForca == Intensidade.Leve)">Leve</option>
+                                <option value="1" selected="@((_sessao.IntensidadeForca ?? Intensidade.Moderada) == Intensidade.Moderada)">Moderada</option>
+                                <option value="2" selected="@(_sessao.IntensidadeForca == Intensidade.Intensa)">Intensa</option>
+                            </select>
+                        </label>
+                    </div>
+                }
+
+                @{ var gasto = GastoDoRascunho(); }
+                @if (gasto?.Kcal is { } kcalTotal)
+                {
+                    <p class="sessao__gasto">Gasto estimado: <strong>≈ @kcalTotal kcal</strong> <span class="dados__meta">(bruto@(gasto.ForcaEstimada ? $"; musculação estimada em {gasto.MinutosForca} min pelas séries — informe a duração para ficar melhor" : ""))</span></p>
+                }
+                else if (gasto is { SemPeso: true } && _sessao.Linhas.Any(l => l.Feito && Atv(l) != Atividade.Nenhuma))
+                {
+                    <p class="dados__dica">Informe seu peso para ver o gasto calórico do treino.</p>
+                    <div class="peso-rapido">
+                        <label class="so-leitor" for="peso-rapido">Seu peso em kg</label>
+                        <input id="peso-rapido" type="text" inputmode="decimal" placeholder="Ex.: 78,5" @bind="_pesoRapido" @bind:event="oninput" />
+                        <button type="button" class="botao botao--primario" disabled="@(!PesoRapidoValido)" @onclick="SalvarPesoRapido">Salvar peso</button>
+                    </div>
+                }
+
+                <div class="sessao__adicionar">
+                    <label class="so-leitor" for="novo-exercicio">Adicionar exercício</label>
+                    <input id="novo-exercicio" type="text" list="lista-exercicios" placeholder="Adicionar exercício (ex.: rosca direta)" autocomplete="off"
+                           @bind="_novoExercicio" @bind:event="oninput" @onkeydown="AoTeclarNovo" />
+                    <button type="button" class="botao" disabled="@string.IsNullOrWhiteSpace(_novoExercicio)" @onclick="AdicionarLinha">Adicionar</button>
+                </div>
+
+                <details class="mais-opcoes" open="@(_sessao.Data != EventosFavoa.Hoje || !string.IsNullOrEmpty(_sessao.Observacao))">
+                    <summary>Mais opções</summary>
+                <div class="sessao__dia">
+                    <label class="mini mini--data"><span>Dia do treino</span>
+                        <input type="date" value="@_sessao.Data.ToString("yyyy-MM-dd")" max="@EventosFavoa.Hoje.ToString("yyyy-MM-dd")" @onchange="AoMudarDia" />
+                    </label>
+                    @if (_sessao.Data != EventosFavoa.Hoje)
+                    {
+                        <button type="button" class="botao botao--pequeno botao--fantasma" @onclick="VoltarParaHoje">Hoje</button>
+                    }
+                </div>
+                <div class="campo">
+                    <label for="obs">Observação</label>
+                    <input id="obs" type="text" placeholder="Como foi? (opcional)" @bind="_sessao.Observacao" />
+                </div>
+                </details>
+
+                @if (_erro is not null)
+                {
+                    <p class="captura__aviso" role="alert">@_erro</p>
+                }
+
+                <div class="dados__acoes">
+                    <button type="button" class="botao botao--primario" @onclick="Salvar">Salvar treino</button>
+                    <button type="button" class="botao botao--fantasma" @onclick="Descartar">Descartar</button>
+                </div>
+            </section>
+        }
+    }
+    else if (Aba == "historico")
+    {
+        @if (_painel.Recentes.Count == 0)
+        {
+            <div class="cartao modulo__vazio"><p class="vazio">Nenhum treino ainda.</p></div>
+        }
+        <div class="historico">
+            @foreach (var s in _painel.Recentes)
+            {
+                <article class="cartao historico__item" @key="s.Id">
+                    <div class="historico__topo">
+                        <div>
+                            <div class="rotulo">@NomeDia(s.Data)</div>
+                            <h2 class="historico__titulo">@s.Titulo</h2>
+                        </div>
+                        <div class="historico__numeros">
+                            @if (s.VolumeKg > 0) { <span>@s.VolumeKg.ToString("N0", PtBr) kg de volume</span> }
+                            @if (s.MinutosCardio > 0) { <span>@s.MinutosCardio min de cardio</span> }
+                            @if (s.Kcal is { } kcalSessao) { <span>≈ @kcalSessao kcal</span> }
+                        </div>
+                    </div>
+                    <ul class="historico__lista">
+                        @foreach (var item in s.Itens) { <li>@item</li> }
+                    </ul>
+                    <div class="dados__acoes">
+                        @if (_confirmarExclusao == s.Id)
+                        {
+                            <button type="button" class="botao botao--perigo botao--pequeno" @onclick="() => ExcluirSessao(s.Id)">Apagar treino</button>
+                            <button type="button" class="botao botao--fantasma botao--pequeno" @onclick="() => _confirmarExclusao = null">Manter</button>
+                        }
+                        else
+                        {
+                            <button type="button" class="botao botao--fantasma botao--pequeno botao--perigo-texto" @onclick="() => _confirmarExclusao = s.Id">Excluir</button>
+                        }
+                    </div>
+                </article>
+            }
+        </div>
+    }
+    else if (Aba == "fichas")
+    {
+        @if (_editandoFicha is not null)
+        {
+            <FichaEditor Ficha="_editandoFicha" Exercicios="_painel.Exercicios" AoSalvar="SalvarFicha" AoCancelar="() => _editandoFicha = null" AoExcluir="ExcluirFicha" />
+        }
+        else
+        {
+            <div class="dados__acoes">
+                <button type="button" class="botao botao--primario" @onclick="NovaFicha">Nova ficha</button>
+                <span class="dados__meta">As fichas giram na ordem: depois do A vem o B.</span>
+            </div>
+            @if (_painel.Fichas.Count == 0)
+            {
+                <div class="cartao modulo__vazio"><p class="vazio">Nenhuma ficha. Crie o Treino A com os exercícios, séries, repetições e carga.</p></div>
+            }
+            <div class="fichas">
+                @foreach (var f in _painel.Fichas)
+                {
+                    <article class="cartao ficha" @key="f.Id">
+                        <div class="historico__topo">
+                            <h2 class="historico__titulo">@f.Nome</h2>
+                            <button type="button" class="botao botao--fantasma botao--pequeno" @onclick="() => EditarFicha(f)">Editar</button>
+                        </div>
+                        <ul class="historico__lista">
+                            @foreach (var i in f.Itens) { <li>@i.Exercicio · @Meta(i)</li> }
+                        </ul>
+                    </article>
+                }
+            </div>
+        }
+    }
+    else
+    {
+        <div class="exercicios">
+            <div class="exercicios__lista">
+                @if (_painel.Exercicios.Count == 0)
+                {
+                    <p class="vazio">Os exercícios aparecem aqui conforme você treina ou monta fichas.</p>
+                }
+                @foreach (var grupo in _painel.Exercicios.GroupBy(e => e.Grupo).OrderBy(g => Array.IndexOf(GruposMusculares.Todos, g.Key)))
+                {
+                    <h2 class="grupo__titulo">@grupo.Key</h2>
+                    @foreach (var e in grupo)
+                    {
+                        <button type="button" class="exercicio @(_evolucao?.Exercicio.Id == e.Id ? "exercicio--ativo" : "")" @onclick="() => VerEvolucao(e.Id)">
+                            <span class="exercicio__nome">@e.Nome</span>
+                            <span class="exercicio__info">@(e.MelhorCargaKg is { } m ? $"recorde {m.ToString("0.#", PtBr)} kg · " : "")@Plural(e.VezesFeito, "vez", "vezes")</span>
+                        </button>
+                    }
+                }
+            </div>
+            <aside class="cartao exercicios__detalhe" aria-live="polite">
+                @if (_evolucao is null)
+                {
+                    <p class="vazio">Escolha um exercício para ver a evolução.</p>
+                }
+                else
+                {
+                    <div class="rotulo">@_evolucao.Exercicio.Grupo</div>
+                    <h2 class="historico__titulo">@_evolucao.Exercicio.Nome</h2>
+                    <GraficoLinha Pontos="@_evolucao.Pontos.Select(p => new GraficoLinha.Ponto(p.Data, p.Valor)).ToList()"
+                                  Unidade="@(_evolucao.Exercicio.Tipo == TipoExercicio.Forca ? "kg" : "")"
+                                  Rotulo="@($"Evolução de {_evolucao.Exercicio.Nome}")"
+                                  Vazio="Sem cargas registradas ainda." />
+                    <ul class="historico__lista">
+                        @foreach (var h in _evolucao.Historico) { <li>@h</li> }
+                    </ul>
+                }
+            </aside>
+        </div>
+    }
+
+    <datalist id="lista-exercicios">
+        @foreach (var e in _painel?.Exercicios ?? []) { <option value="@e.Nome"></option> }
+    </datalist>
+</main>
+
+@code {
+    [SupplyParameterFromQuery(Name = "aba")] public string? AbaQuery { get; set; }
+
+    private static readonly CultureInfo PtBr = new("pt-BR");
+    private static readonly (string Chave, string Rotulo)[] Abas = [("hoje", "Hoje"), ("historico", "Histórico"), ("fichas", "Fichas"), ("exercicios", "Exercícios")];
+
+    private string Aba => Abas.Any(a => a.Chave == AbaQuery) ? AbaQuery! : "hoje";
+
+    private PainelTreino? _painel;
+    private string _pesoRapido = "";
+    private bool PesoRapidoValido => TentarPeso(out _);
+    private bool TentarPeso(out decimal kg) =>
+        decimal.TryParse(_pesoRapido.Replace('.', ','), System.Globalization.NumberStyles.Number, new System.Globalization.CultureInfo("pt-BR"), out kg) && kg is >= 20 and <= 400;
+    private async Task SalvarPesoRapido()
+    {
+        if (!TentarPeso(out var kg)) return;
+        await Fitness.RegistrarPesoAsync(EventosFavoa.Hoje, kg);
+        _pesoRapido = "";
+        await Recarregar();
+    }
+    private SessaoRascunho? _sessao;
+    private FichaEdicao? _editandoFicha;
+    private EvolucaoExercicio? _evolucao;
+    private Guid? _confirmarExclusao;
+    private string _novoExercicio = "";
+    private string? _erro;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Eventos.RegistroSalvo += Recarregar;
+        await Recarregar();
+    }
+
+    private async Task Recarregar()
+    {
+        _painel = await Fitness.ObterPainelTreinoAsync(EventosFavoa.Hoje);
+        _ultimos = await Fitness.ObterUltimosEsportesAsync(Esportes.Where(e => e != "Musculação"));
+        await InvokeAsync(StateHasChanged);
+    }
+
+    // ---------- Sessão ----------
+
+    private async Task Comecar(Guid? fichaId)
+    {
+        _erro = null;
+        _sessao = await Fitness.PrepararSessaoAsync(fichaId, EventosFavoa.Hoje);
+    }
+
+    private static readonly string[] Esportes = ["Muay thai", "Futebol", "Corrida", "Musculação"];
+
+    private IReadOnlyDictionary<string, UltimoEsporte> _ultimos = new Dictionary<string, UltimoEsporte>();
+
+    // Esporte com duração conhecida: um toque salva igual à última vez (com Desfazer no aviso).
+    private async Task ComecarEsporte(string nome)
+    {
+        if (_ultimos.TryGetValue(nome, out var ultimo) && ultimo.Minutos is > 0)
+        {
+            var linha = new LinhaSessao { Exercicio = nome, Tipo = TipoExercicio.Cardio, Feito = true, Minutos = ultimo.Minutos, Intensidade = ultimo.Intensidade, DistanciaKm = ultimo.DistanciaKm };
+            var rascunho = new SessaoRascunho { Data = EventosFavoa.Hoje, Titulo = nome, Linhas = [linha] };
+            var r = await Fitness.SalvarSessaoAsync(rascunho);
+            if (!r.Sucesso) { _erro = r.Mensagem; return; }
+            Eventos.MostrarMensagem($"{nome} · {ultimo.Minutos} min registrado.", r.Criado);
+            await Eventos.NotificarRegistroSalvoAsync();
+            return;
+        }
+        await Comecar(null);
+        if (_sessao is null) return;
+        if (nome == "Musculação")
+        {
+            _sessao.Titulo = "Musculação";
+            return;
+        }
+        var tipo = TipoExercicio.Cardio;
+        var conhecido = _painel?.Exercicios.FirstOrDefault(e => Texto.Normalizar(e.Nome) == Texto.Normalizar(nome));
+        _sessao.Linhas.Add(new LinhaSessao { Exercicio = conhecido?.Nome ?? nome, Tipo = tipo, Feito = true, Intensidade = nome is "Muay thai" or "Futebol" ? Intensidade.Moderada : null });
+    }
+
+    private async Task Repetir()
+    {
+        _erro = null;
+        _sessao = await Fitness.PrepararRepeticaoAsync(EventosFavoa.Hoje);
+    }
+
+    private void AdicionarLinha()
+    {
+        if (_sessao is null || string.IsNullOrWhiteSpace(_novoExercicio)) return;
+        var nome = Texto.Capitalizar(_novoExercicio);
+        var conhecido = _painel?.Exercicios.FirstOrDefault(e => Texto.Normalizar(e.Nome) == Texto.Normalizar(nome));
+        var tipo = conhecido?.Tipo ?? GruposMusculares.TipoPorGrupo(GruposMusculares.Inferir(nome));
+        _sessao.Linhas.Add(new LinhaSessao { Exercicio = conhecido?.Nome ?? nome, Tipo = tipo, Feito = true, Series = tipo == TipoExercicio.Forca ? 3 : null });
+        _novoExercicio = "";
+    }
+
+    private void AoTeclarNovo(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") AdicionarLinha();
+    }
+
+    private async Task Salvar()
+    {
+        if (_sessao is null) return;
+        var r = await Fitness.SalvarSessaoAsync(_sessao);
+        if (!r.Sucesso) { _erro = r.Mensagem; return; }
+        _sessao = null;
+        Eventos.MostrarMensagem(r.Mensagem);
+        await Eventos.NotificarRegistroSalvoAsync();
+    }
+
+    private void Descartar() => _sessao = null;
+
+    private void AoMudarDia(ChangeEventArgs e)
+    {
+        if (_sessao is not null && DateOnly.TryParse(e.Value?.ToString(), out var d) && d <= EventosFavoa.Hoje) _sessao.Data = d;
+    }
+
+    private void VoltarParaHoje()
+    {
+        if (_sessao is not null) _sessao.Data = EventosFavoa.Hoje;
+    }
+
+    // ---------- Gasto calórico ----------
+
+    private static Atividade Atv(LinhaSessao l) => GastoCalorico.Classificar(l.Exercicio, l.Tipo);
+
+    private static void AoMudarIntensidade(LinhaSessao linha, ChangeEventArgs e) =>
+        linha.Intensidade = int.TryParse(e.Value?.ToString(), out var n) ? (Intensidade)n : null;
+
+    private void AoMudarIntensidadeForca(ChangeEventArgs e)
+    {
+        if (_sessao is not null) _sessao.IntensidadeForca = int.TryParse(e.Value?.ToString(), out var n) ? (Intensidade)n : null;
+    }
+
+    private List<LinhaSessao> LinhasFeitas() => _sessao is null ? [] : _sessao.Linhas.Where(l => l.Feito).ToList();
+
+    private GastoSessao? GastoDoRascunho()
+    {
+        if (_sessao is null) return null;
+        var itens = LinhasFeitas().Select(l => new ItemGasto(Atv(l), l.Minutos, l.DistanciaKm, l.Series, l.Intensidade)).ToList();
+        return GastoCalorico.Calcular(itens, _sessao.MinutosForca, _sessao.IntensidadeForca, _painel?.PesoAtualKg);
+    }
+
+    private int? KcalLinha(LinhaSessao linha)
+    {
+        var feitas = LinhasFeitas();
+        var i = feitas.IndexOf(linha);
+        var g = GastoDoRascunho();
+        return i < 0 || g is null || i >= g.PorItem.Count ? null : g.PorItem[i];
+    }
+
+    private async Task ExcluirSessao(Guid id)
+    {
+        _confirmarExclusao = null;
+        var r = await Fitness.ExcluirSessaoAsync(id);
+        Eventos.MostrarMensagem(r.Mensagem);
+        await Eventos.NotificarRegistroSalvoAsync();
+    }
+
+    // ---------- Fichas ----------
+
+    private void NovaFicha() =>
+        _editandoFicha = new FichaEdicao(null, $"Treino {(char)('A' + (_painel?.Fichas.Count ?? 0) % 26)}", []);
+
+    private void EditarFicha(FichaResumo f) =>
+        _editandoFicha = new FichaEdicao(f.Id, f.Nome, f.Itens.Select(i => new ItemFichaEdicao(i.Exercicio, i.Tipo, i.Series, i.Repeticoes, i.CargaKg, i.Minutos)).ToList());
+
+    private async Task<string?> SalvarFicha(FichaEdicao f)
+    {
+        var r = await Fitness.SalvarFichaAsync(f);
+        if (!r.Sucesso) return r.Mensagem;
+        _editandoFicha = null;
+        Eventos.MostrarMensagem(r.Mensagem);
+        await Eventos.NotificarRegistroSalvoAsync();
+        return null;
+    }
+
+    private async Task ExcluirFicha(Guid id)
+    {
+        var r = await Fitness.ExcluirFichaAsync(id);
+        _editandoFicha = null;
+        Eventos.MostrarMensagem(r.Mensagem);
+        await Eventos.NotificarRegistroSalvoAsync();
+    }
+
+    // ---------- Exercícios ----------
+
+    private async Task VerEvolucao(Guid id) => _evolucao = await Fitness.ObterEvolucaoAsync(id);
+
+    // ---------- Texto ----------
+
+    private static string Meta(ItemFichaResumo i)
+    {
+        var partes = new List<string>();
+        if (i.Series is { } s && i.Repeticoes is { } r) partes.Add($"{s}×{r}");
+        if (i.CargaKg is { } c && c > 0) partes.Add($"{c.ToString("0.#", PtBr)} kg");
+        if (i.Minutos is { } m && m > 0) partes.Add($"{m} min");
+        return partes.Count == 0 ? "livre" : string.Join(" · ", partes);
+    }
+
+    private static string NomeDia(DateOnly dia)
+    {
+        var hoje = EventosFavoa.Hoje;
+        if (dia == hoje) return "Hoje";
+        if (dia == hoje.AddDays(-1)) return "Ontem";
+        var t = dia.ToString("dddd, d 'de' MMM", PtBr).Replace(".", "");
+        return char.ToUpper(t[0]) + t[1..];
+    }
+
+    private static string Plural(int n, string um, string varios) => $"{n} {(n == 1 ? um : varios)}";
+
+    public void Dispose() => Eventos.RegistroSalvo -= Recarregar;
+}

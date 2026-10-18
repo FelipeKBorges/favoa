@@ -1,0 +1,276 @@
+@implements IDisposable
+@inject EventosFavoa Eventos
+@inject IFavoaServico Servico
+@inject NavigationManager Nav
+@inject Microsoft.JSInterop.IJSRuntime Js
+
+@* Celular: barra fixa embaixo (no alcance do polegar) com o + que lança de qualquer tela.
+   No PC a barra fica escondida pelo CSS; o painel de lançamento também abre por atalho do ícone (?lancar=). *@
+
+<nav class="barra-celular" aria-label="Seções">
+    @foreach (var d in Fixos.Take(2)) { @Item(d) }
+    <button type="button" class="barra-celular__mais-um" aria-label="Lançar" aria-haspopup="dialog" @onclick="() => Abrir(null)">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+    </button>
+    @foreach (var d in Fixos.Skip(2).Take(1)) { @Item(d) }
+    <button type="button" class="barra-celular__item @(MaisAtivo ? "active" : "")" aria-haspopup="dialog" aria-label="@(MaisAtivo ? $"{RotuloMais}, mais seções" : "Mais seções")" aria-expanded="@_menuAberto" @onclick="() => _menuAberto = true">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
+        <span>@RotuloMais</span>
+    </button>
+</nav>
+
+@if (_menuAberto)
+{
+    <div class="painel-fundo" @onclick="() => _menuAberto = false"></div>
+    <div class="painel" role="dialog" aria-modal="true" aria-label="Mais seções">
+        <div class="painel__alca" aria-hidden="true"></div>
+        <nav class="painel__lista" aria-label="Mais seções">
+            @foreach (var d in NoMais)
+            {
+                <a class="painel__link" href="@d.Href" @onclick="() => _menuAberto = false">
+                    <span>@d.Rotulo</span><span class="painel__dica">@d.Dica</span>
+                </a>
+            }
+        </nav>
+        <button type="button" class="botao botao--fantasma botao--pequeno painel__personalizar" aria-expanded="@_personalizando" @onclick="() => _personalizando = !_personalizando">
+            Personalizar a barra de baixo
+        </button>
+        <div class="painel__tema">
+            <span class="dados__meta">Aparência</span>
+            <EscolhaTema />
+        </div>
+        @if (_personalizando)
+        {
+            <fieldset class="painel__escolha">
+                <legend>Escolha 3 atalhos para a barra (o + e o Mais ficam sempre)</legend>
+                @foreach (var d in Todos)
+                {
+                    var marcado = _escolhidos.Contains(d.Chave);
+                    var cheio = _escolhidos.Count >= 3 && !marcado;
+                    <label class="painel__opcao @(cheio ? "painel__opcao--off" : "")">
+                        <input type="checkbox" checked="@marcado" disabled="@cheio" @onchange="e => Alternar(d.Chave, (bool)(e.Value ?? false))" />
+                        <span>@d.Rotulo</span>
+                    </label>
+                }
+            </fieldset>
+        }
+    </div>
+}
+
+@if (_lancando)
+{
+    <div class="painel-fundo" @onclick="Fechar"></div>
+    <div class="painel painel--lancar" role="dialog" aria-modal="true" aria-labelledby="painel-lancar-titulo">
+        <div class="painel__alca" aria-hidden="true"></div>
+        <div class="painel__topo">
+            <h2 id="painel-lancar-titulo">Lançar</h2>
+            <button type="button" class="botao-icone" aria-label="Fechar" @onclick="Fechar">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+            </button>
+        </div>
+        @if (_modo is null)
+        {
+            <div class="painel__grade">
+                @foreach (var b in Blocos)
+                {
+                    var bloco = b;
+                    <button type="button" class="painel__bloco" @onclick="() => Escolher(bloco.Chave)">
+                        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="@bloco.Icone" /></svg>
+                        <span>@bloco.Rotulo</span>
+                    </button>
+                }
+            </div>
+            <button type="button" class="botao botao--fantasma botao--pequeno painel__frase" @onclick="AbrirFrase">Escrever uma frase</button>
+        }
+        else
+        {
+            <button type="button" class="botao botao--fantasma botao--pequeno painel__voltar" @onclick='() => _modo = null'>← Outras opções</button>
+        }
+
+        @if (_modo == "agua")
+        {
+            <div class="painel__agua">
+                @foreach (var ml in AguaRapida.Copos)
+                {
+                    <button type="button" class="botao painel__copo" @onclick="() => Agua(ml)">+ @ml ml</button>
+                }
+            </div>
+            <p class="dados__dica">Cada toque soma na água de hoje. Errou? Use Desfazer no aviso.</p>
+        }
+        else if (_modo == "dinheiro")
+        {
+            <NovoLancamento @key="_versao" MostrarTopo="false" ComecarComoReceita="_receita" ProjetoInicial="_projeto" AoSalvar="Fechar" />
+        }
+    </div>
+}
+
+@code {
+    private sealed record Destino(string Chave, string Href, string Rotulo, string Dica, string Icone);
+
+    private static readonly Destino[] Todos =
+    [
+        new("hoje", "", "Hoje", "colmeia e calendário", "M12 2.5l8 4.6v9.8l-8 4.6-8-4.6V7.1z"),
+        new("financas", "financas", "Finanças", "lançamentos e orçamento", "M3 6h18v13H3zM3 10h18M7 15h3"),
+        new("tarefas", "tarefas", "Tarefas", "o que fazer", "M4 12l3 3 6-6M14 7h6M14 12h6M4 18h16"),
+        new("habitos", "habitos", "Hábitos", "marcar o dia", "M12 21s-7-4.4-7-10a4 4 0 017-2.6A4 4 0 0119 11c0 5.6-7 10-7 10z"),
+        new("fitness", "treino", "Fitness", "treino, dieta e medidas", "M3 9v6M6 7v10M18 7v10M21 9v6M6 12h12"),
+        new("projetos", "projetos", "Projetos", "viagens, trabalhos, casa", "M4 7h6l2 2h8v10H4z"),
+    ];
+
+    private sealed record Bloco(string Chave, string Rotulo, string Icone);
+
+    private static readonly Bloco[] Blocos =
+    [
+        new("despesa", "Despesa", "M12 3v18M17 7.5c0-1.7-2.2-3-5-3s-5 1.3-5 3 2.2 3 5 3 5 1.3 5 3-2.2 3-5 3-5-1.3-5-3"),
+        new("receita", "Receita", "M12 20V4M6 10l6-6 6 6"),
+        new("agua", "Água", "M12 3s6 6.5 6 11a6 6 0 01-12 0c0-4.5 6-11 6-11z"),
+        new("refeicao", "Refeição", "M7 3v8a3 3 0 006 0V3M10 3v18M17 3c-2 2-2 6 0 8v10"),
+        new("treino", "Treino", "M3 9v6M6 7v10M18 7v10M21 9v6M6 12h12"),
+        new("peso", "Peso", "M5 20h14l-2-12H7zM9 8a3 3 0 016 0"),
+    ];
+
+    private void Escolher(string chave)
+    {
+        switch (chave)
+        {
+            case "despesa": _modo = "dinheiro"; _receita = false; _versao++; break;
+            case "receita": _modo = "dinheiro"; _receita = true; _versao++; break;
+            case "agua": _modo = "agua"; break;
+            case "refeicao": _lancando = false; Nav.NavigateTo("dieta"); break;
+            case "treino": _lancando = false; Nav.NavigateTo("treino"); break;
+            case "peso": _lancando = false; Nav.NavigateTo("medidas?peso=1"); break;
+        }
+    }
+
+    private static readonly Destino[] Sempre =
+    [
+        new("cadastros", "cadastros", "Cadastros", "categorias, contas, lembretes", ""),
+        new("dados", "dados", "Seus dados", "backup, pessoas e PIN", ""),
+    ];
+
+    private const string ChaveBarra = "favoa_barra";
+    private static readonly string[] Padrao = ["hoje", "financas", "tarefas"];
+    private List<string> _escolhidos = [.. Padrao];
+    private bool _personalizando;
+
+    private IEnumerable<Destino> Fixos => _escolhidos.Select(c => Todos.FirstOrDefault(d => d.Chave == c)).Where(d => d is not null).Select(d => d!);
+    private IEnumerable<Destino> NoMais => Todos.Where(d => !_escolhidos.Contains(d.Chave)).Concat(Sempre);
+
+    private RenderFragment Item(Destino d) => __builder =>
+    {
+        <NavLink class="@ClasseItem(d)" href="@d.Href" Match="@(d.Href == "" ? NavLinkMatch.All : NavLinkMatch.Prefix)">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="@d.Icone" /></svg>
+            <span>@d.Rotulo</span>
+        </NavLink>
+    };
+
+    private async Task Alternar(string chave, bool ligado)
+    {
+        if (ligado && !_escolhidos.Contains(chave) && _escolhidos.Count < 3) _escolhidos.Add(chave);
+        else if (!ligado) _escolhidos.Remove(chave);
+        // mantém a ordem do catálogo
+        _escolhidos = Todos.Where(d => _escolhidos.Contains(d.Chave)).Select(d => d.Chave).ToList();
+        try { if (_escolhidos.Count == 3) await Js.InvokeVoidAsync("localStorage.setItem", ChaveBarra, string.Join(",", _escolhidos)); } catch { /* sem armazenamento: vale só nesta visita */ }
+    }
+
+    private bool _menuAberto;
+    private bool _lancando;
+    private string? _modo;
+    private bool _receita;
+    private Guid? _projeto;
+    private int _versao;
+
+    // Dentro de uma seção que mora no "Mais", o botão mostra o nome dela (assim a pessoa sabe onde está).
+    private static bool Combina(Destino m, string rota) =>
+        m.Href != "" && (rota.StartsWith(m.Href, StringComparison.OrdinalIgnoreCase)
+            || (m.Chave == "fitness" && (rota.StartsWith("dieta", StringComparison.OrdinalIgnoreCase) || rota.StartsWith("medidas", StringComparison.OrdinalIgnoreCase))));
+
+    private string RotuloMais
+    {
+        get
+        {
+            var rota = Nav.ToBaseRelativePath(Nav.Uri).Split('?')[0];
+            var atual = NoMais.FirstOrDefault(m => Combina(m, rota));
+            return atual is null ? "Mais" : atual.Rotulo == "Seus dados" ? "Dados" : atual.Rotulo;
+        }
+    }
+
+    private string ClasseItem(Destino d) => d.Chave == "fitness" && Combina(d, RotaAtual) ? "barra-celular__item active" : "barra-celular__item";
+
+    private string RotaAtual => Nav.ToBaseRelativePath(Nav.Uri).Split('?')[0];
+
+    private bool MaisAtivo
+    {
+        get
+        {
+            var rota = Nav.ToBaseRelativePath(Nav.Uri).Split('?')[0];
+            return NoMais.Any(m => Combina(m, rota));
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        Eventos.AbrirLancamentoSolicitado += AoSolicitar;
+        Nav.LocationChanged += AoNavegar;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool primeira)
+    {
+        if (!primeira) return;
+        try
+        {
+            var salvo = await Js.InvokeAsync<string?>("localStorage.getItem", ChaveBarra);
+            var chaves = (salvo ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries).Select(c => c is "treino" or "dieta" ? "fitness" : c)
+                .Where(c => Todos.Any(d => d.Chave == c)).Distinct().ToList();
+            foreach (var padrao in Padrao) if (chaves.Count < 3 && salvo is not null && !chaves.Contains(padrao)) chaves.Add(padrao);
+            if (chaves.Count == 3) { _escolhidos = Todos.Where(d => chaves.Contains(d.Chave)).Select(d => d.Chave).ToList(); StateHasChanged(); }
+        }
+        catch { /* sem armazenamento: usa o padrão */ }
+        // Atalho do ícone do app: /?lancar=despesa | receita | agua
+        var query = new Uri(Nav.Uri).Query;
+        var modo = System.Web.HttpUtility.ParseQueryString(query).Get("lancar");
+        if (modo is not null)
+        {
+            Abrir(modo);
+            StateHasChanged();
+        }
+    }
+
+    private void AoSolicitar(string? modo, Guid? projeto) => _ = InvokeAsync(() => { Abrir(modo, projeto); StateHasChanged(); });
+
+    private void AoNavegar(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        _menuAberto = false; // e o "Mais" acende quando a página é uma das dele
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void Abrir(string? modo, Guid? projeto = null)
+    {
+        _projeto = projeto;
+        _menuAberto = false;
+        _modo = modo is null ? null : modo == "agua" ? "agua" : "dinheiro";
+        _receita = modo == "receita";
+        _versao++;
+        _lancando = true;
+    }
+
+    private void Fechar() => _lancando = false;
+
+    private void AbrirFrase()
+    {
+        _lancando = false;
+        Eventos.SolicitarCaptura();
+    }
+
+    private async Task Agua(int ml)
+    {
+        await AguaRapida.RegistrarAsync(Servico, Eventos, ml);
+        _lancando = false;
+    }
+
+    public void Dispose()
+    {
+        Eventos.AbrirLancamentoSolicitado -= AoSolicitar;
+        Nav.LocationChanged -= AoNavegar;
+    }
+}

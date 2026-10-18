@@ -1,0 +1,117 @@
+@page "/projetos"
+@using System.Globalization
+@inject IProjetosServico Servico
+@inject NavigationManager Nav
+
+<PageTitle>Projetos · Fávoa</PageTitle>
+
+<main class="modulo projetos">
+    <header class="pagina__topo">
+        <div class="pagina__titulo">
+            <h1>Projetos</h1>
+            <p class="pagina__resumo"><span>Viagens, trabalhos e planos da casa, com tarefas, gastos e datas no mesmo lugar.</span></p>
+        </div>
+        <div class="pagina__acoes">
+            <button type="button" class="botao botao--primario" aria-expanded="@_novo" @onclick="() => _novo = !_novo">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+                Novo projeto
+            </button>
+        </div>
+    </header>
+
+    @if (_novo)
+    {
+        <FormProjeto AoFechar="() => _novo = false" AoSalvar="Criado" />
+    }
+
+    @if (_lista is null)
+    {
+        <p class="carregando">Carregando…</p>
+    }
+    else if (_lista.Count == 0 && !_novo)
+    {
+        <section class="cartao projetos__vazio">
+            <p>Nenhum projeto ainda. Crie o primeiro: uma viagem que vocês estão planejando, um trabalho com prazo, uma reforma.</p>
+            <p class="dados__dica">Depois, qualquer tarefa ou gasto entra no projeto com <strong>#nome</strong> na frase. Ex.: <em>hotel 1200 #chile</em>.</p>
+        </section>
+    }
+    else
+    {
+        <div class="segmento" role="radiogroup" aria-label="Mostrar">
+            @foreach (var (filtro, rotulo) in Filtros)
+            {
+                var n = _lista.Count(p => Passa(p, filtro));
+                <button type="button" role="radio" aria-checked="@(_filtro == filtro)" class="segmento__opcao @(_filtro == filtro ? "segmento__opcao--ativa" : "")" @onclick="() => _filtro = filtro">@rotulo (@n)</button>
+            }
+        </div>
+
+        <div class="projetos__grade">
+            @foreach (var p in _lista.Where(p => Passa(p, _filtro)))
+            {
+                <a class="cartao projeto-cartao" href="@($"projetos/{p.Id}")">
+                    <div class="projeto-cartao__topo">
+                        <span class="chip">@TiposProjeto.Nome(p.Tipo)</span>
+                        <span class="projeto-cartao__situacao projeto-cartao__situacao--@p.Situacao.ToString().ToLowerInvariant()">@TiposProjeto.Nome(p.Situacao)</span>
+                    </div>
+                    <h2 class="projeto-cartao__nome">@p.Nome</h2>
+                    <p class="projeto-cartao__datas">@Datas(p)@(p.DaCasa ? "" : " · só você")</p>
+                    <div class="projeto-cartao__progresso" role="img" aria-label="@p.Percentual% feito">
+                        <span class="detalhe__barra"><span style="width:@p.Percentual%"></span></span>
+                        <span class="projeto-cartao__pct">@p.Percentual%</span>
+                    </div>
+                    @if (p.Proximo is not null)
+                    {
+                        <p class="projeto-cartao__proximo"><span class="rotulo">Próximo</span> @p.Proximo</p>
+                    }
+                    @if (p.OrcamentoCentavos is { } o)
+                    {
+                        <p class="projeto-cartao__dinheiro @(p.GastoCentavos > o ? "projeto-cartao__dinheiro--estourado" : "")">@Dinheiro(p.GastoCentavos) de @Dinheiro(o)</p>
+                    }
+                    else if (p.GastoCentavos > 0 || p.RecebidoCentavos > 0)
+                    {
+                        <p class="projeto-cartao__dinheiro">@(p.GastoCentavos > 0 ? $"Gasto {Dinheiro(p.GastoCentavos)}" : "")@(p.GastoCentavos > 0 && p.RecebidoCentavos > 0 ? " · " : "")@(p.RecebidoCentavos > 0 ? $"Recebido {Dinheiro(p.RecebidoCentavos)}" : "")</p>
+                    }
+                </a>
+            }
+        </div>
+    }
+</main>
+
+@code {
+    private enum Filtro { Ativos, Ideias, Concluidos }
+    private static readonly (Filtro, string)[] Filtros = [(Filtro.Ativos, "Ativos"), (Filtro.Ideias, "Ideias"), (Filtro.Concluidos, "Concluídos")];
+    private static readonly CultureInfo PtBr = new("pt-BR");
+
+    private IReadOnlyList<ProjetoResumo>? _lista;
+    private bool _novo;
+    private Filtro _filtro = Filtro.Ativos;
+
+    protected override async Task OnInitializedAsync() => _lista = await Servico.ListarAsync(EventosFavoa.Hoje);
+
+    private static bool Passa(ProjetoResumo p, Filtro f) => f switch
+    {
+        Filtro.Ativos => p.Situacao is SituacaoProjeto.Planejando or SituacaoProjeto.EmAndamento or SituacaoProjeto.Pausado,
+        Filtro.Ideias => p.Situacao == SituacaoProjeto.Ideia,
+        _ => p.Situacao == SituacaoProjeto.Concluido,
+    };
+
+    private void Criado(Guid id) => Nav.NavigateTo($"projetos/{id}");
+
+    private static string Dinheiro(long c) => Favoa.Core.Captura.Texto.FormatarMoeda(c);
+
+    private static string Datas(ProjetoResumo p)
+    {
+        var hoje = EventosFavoa.Hoje;
+        var periodo = (p.Inicio, p.Fim) switch
+        {
+            ({ } i, { } f) => $"{i:dd/MM} a {f:dd/MM}",
+            ({ } i, null) => $"desde {i:dd/MM}",
+            (null, { } f) => $"até {f:dd/MM}",
+            _ => "sem data",
+        };
+        var dias = p.DiasAte(hoje) is { } d && p.Situacao != SituacaoProjeto.Concluido
+            ? d == 0 ? " · hoje" : d == 1 ? " · amanhã" : $" · em {d} dias"
+            : "";
+        return periodo + dias;
+    }
+}

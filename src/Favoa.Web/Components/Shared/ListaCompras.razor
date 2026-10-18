@@ -1,0 +1,128 @@
+@using System.Globalization
+@using Favoa.Core.Fitness
+@inject IFitnessServico Fitness
+@inject IJSRuntime Js
+
+@* O plano é um dia típico; a lista multiplica pelos dias que a pessoa vai comprar. Os itens marcados
+   ficam só neste aparelho (localStorage), porque a lista é de quem está no mercado. *@
+<section class="compras" aria-label="Lista de compras">
+    @if (_itens is null)
+    {
+        <p class="carregando">Carregando…</p>
+    }
+    else if (_itens.Count == 0)
+    {
+        <div class="cartao modulo__vazio">
+            <p class="vazio">Seu plano ainda está vazio. Adicione alimentos às refeições em <a href="@("dieta?aba=plano")">Plano</a> e a lista aparece aqui.</p>
+        </div>
+    }
+    else
+    {
+        <div class="cartao compras__topo">
+            <div class="compras__dias" role="group" aria-label="Comprar para quantos dias">
+                <span>Comprar para</span>
+                <button type="button" class="botao botao--pequeno" aria-label="Menos um dia" disabled="@(_dias <= 1)" @onclick="() => MudarDias(-1)">−</button>
+                <strong>@_dias @(_dias == 1 ? "dia" : "dias")</strong>
+                <button type="button" class="botao botao--pequeno" aria-label="Mais um dia" disabled="@(_dias >= 14)" @onclick="() => MudarDias(1)">+</button>
+            </div>
+            <p class="dados__meta">@_itens.Count(i => _marcados.Contains(i.Id)) de @_itens.Count no carrinho</p>
+        </div>
+
+        <ul class="compras__lista">
+            @foreach (var i in _itens)
+            {
+                var item = i;
+                var marcado = _marcados.Contains(item.Id);
+                <li class="@(marcado ? "compras__item compras__item--feito" : "compras__item")">
+                    <label>
+                        <input type="checkbox" checked="@marcado" @onchange="() => Alternar(item.Id)" />
+                        <span class="compras__nome">@item.Nome</span>
+                        <span class="compras__qtd">@Quantidade(item.Gramas * _dias)</span>
+                    </label>
+                </li>
+            }
+        </ul>
+
+        <div class="dados__acoes">
+            <button type="button" class="botao" @onclick="Copiar">@(_copiado ? "Copiada" : "Copiar a lista")</button>
+            @if (_marcados.Count > 0)
+            {
+                <button type="button" class="botao botao--fantasma" @onclick="Limpar">Desmarcar tudo</button>
+            }
+        </div>
+    }
+</section>
+
+@code {
+    private sealed record Item(Guid Id, string Nome, int Gramas);
+
+    private const string Chave = "favoa_compras";
+    private List<Item>? _itens;
+    private readonly HashSet<Guid> _marcados = [];
+    private int _dias = 7;
+    private bool _copiado;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var dia = await Fitness.ObterDiaDietaAsync(EventosFavoa.Hoje);
+        _itens = dia.Refeicoes.SelectMany(r => r.Plano)
+            .GroupBy(p => p.AlimentoId)
+            .Select(g => new Item(g.Key, g.First().Alimento, g.Sum(p => p.Gramas)))
+            .OrderBy(i => i.Nome, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool primeira)
+    {
+        if (!primeira) return;
+        try
+        {
+            var salvo = await Js.InvokeAsync<string?>("localStorage.getItem", Chave);
+            if (string.IsNullOrEmpty(salvo)) return;
+            var partes = salvo.Split('|');
+            if (partes.Length > 0 && int.TryParse(partes[0], out var d) && d is >= 1 and <= 14) _dias = d;
+            if (partes.Length > 1)
+                foreach (var t in partes[1].Split(',', StringSplitOptions.RemoveEmptyEntries))
+                    if (Guid.TryParse(t, out var id)) _marcados.Add(id);
+            StateHasChanged();
+        }
+        catch { /* sem armazenamento: começa limpo */ }
+    }
+
+    private async Task Salvar()
+    {
+        try { await Js.InvokeVoidAsync("localStorage.setItem", Chave, $"{_dias}|{string.Join(',', _marcados)}"); } catch { }
+    }
+
+    private async Task MudarDias(int delta)
+    {
+        _dias = Math.Clamp(_dias + delta, 1, 14);
+        await Salvar();
+    }
+
+    private async Task Alternar(Guid id)
+    {
+        if (!_marcados.Add(id)) _marcados.Remove(id);
+        await Salvar();
+    }
+
+    private async Task Limpar()
+    {
+        _marcados.Clear();
+        await Salvar();
+    }
+
+    private async Task Copiar()
+    {
+        var texto = string.Join("\n", (_itens ?? []).Where(i => !_marcados.Contains(i.Id)).Select(i => $"- {i.Nome}: {Quantidade(i.Gramas * _dias)}"));
+        try
+        {
+            await Js.InvokeVoidAsync("navigator.clipboard.writeText", texto);
+            _copiado = true;
+        }
+        catch { _copiado = false; }
+    }
+
+    public static string Quantidade(int gramas) =>
+        gramas >= 1000 ? $"{(gramas / 1000.0).ToString("0.##", CultureInfo.GetCultureInfo("pt-BR"))} kg" : $"{gramas} g";
+}

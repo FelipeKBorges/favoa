@@ -1,0 +1,310 @@
+@page "/tarefas"
+@using System.Globalization
+@using Favoa.Core.Rotina
+@implements IDisposable
+@inject IFavoaServico Servico
+@inject EventosFavoa Eventos
+@inject Favoa.Core.Pessoas.IPessoaAtual PessoaAtual
+
+<PageTitle>Tarefas · Fávoa</PageTitle>
+
+<main class="modulo">
+    <header class="pagina__topo">
+        <div class="pagina__titulo">
+            <h1>Tarefas</h1>
+            @if (_quadro is not null)
+            {
+                <p class="pagina__resumo">
+                    @if (_quadro.Atrasadas.Count > 0)
+                    {
+                        <span class="pagina__resumo-alerta">@Plural(_quadro.Atrasadas.Count, "atrasada", "atrasadas")</span>
+                        <span aria-hidden="true">·</span>
+                    }
+                    <span>@Plural(_quadro.ParaHoje.Count, "para hoje", "para hoje")</span>
+                    <span aria-hidden="true">·</span>
+                    <span>@Plural(_quadro.FeitasUltimos7Dias, "feita", "feitas") nos últimos 7 dias</span>
+                </p>
+            }
+        </div>
+    </header>
+
+    <div class="nova">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--mel)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+        <label class="so-leitor" for="nova-tarefa">Nova tarefa</label>
+        <input id="nova-tarefa" type="text" autocomplete="off" placeholder="Nova tarefa. Ex.: pagar luz sexta"
+               value="@_nova" @oninput="AoDigitar" @onkeydown="AoTeclar" />
+        @if (Final is { Titulo: not null } f)
+        {
+            <span class="chip nova__previa">@ResumoPrevia(f)</span>
+        }
+        <button type="button" class="botao botao--fantasma nova__alternar" aria-expanded="@_detalhes" aria-controls="nova-detalhes" @onclick="AlternarDetalhes">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8" /><circle cx="16" cy="7" r="2" /><circle cx="10" cy="17" r="2" /></svg>
+            <span class="so-pc">Horário e quem faz</span><span class="so-celular">Detalhes</span>
+        </button>
+        <button type="button" class="botao botao--primario" disabled="@(Final?.PodeSalvar != true)" @onclick="Criar">Adicionar</button>
+    </div>
+    @if (Final is { Aviso: not null, Titulo: not null } comAviso)
+    {
+        <p class="novo-lancamento__erro" role="alert">@comAviso.Aviso</p>
+    }
+
+    @if (_detalhes)
+    {
+        <div id="nova-detalhes" class="cartao nova__detalhes">
+            <CamposTarefa Id="nova" @bind-Prazo="_prazo" @bind-Hora="_hora" @bind-AvisoMinutos="_aviso" @bind-Responsaveis="_responsaveis" Pessoas="_ctx.Pessoas" />
+            <p class="dados__dica">Também dá para escrever na frase: <em>ligar no banco amanhã às 15h avisar 30 min antes @(Exemplo)</em></p>
+        </div>
+    }
+
+    @if (_ctx.Pessoas.Count > 1 && _quadro is { Pendentes: > 0 })
+    {
+        <div class="segmento tarefas__filtro" role="radiogroup" aria-label="Mostrar tarefas">
+            <button type="button" role="radio" aria-checked="@(!_soMinhas)" class="segmento__opcao @(!_soMinhas ? "segmento__opcao--ativa" : "")" @onclick="() => _soMinhas = false">Todas</button>
+            <button type="button" role="radio" aria-checked="@_soMinhas" class="segmento__opcao @(_soMinhas ? "segmento__opcao--ativa" : "")" @onclick="() => _soMinhas = true">Minhas e da casa</button>
+        </div>
+    }
+
+    @if (_ctx.Pessoas.Count > 1 && _quadro is { Pendentes: > 0 })
+    {
+        <p class="tarefas__legenda" aria-hidden="true">
+            @foreach (var pe in _ctx.Pessoas)
+            {
+                <span><span class="avatar avatar--mini" style="--cor-pessoa: @pe.Cor">@pe.Inicial</span> @pe.Nome</span>
+            }
+        </p>
+    }
+
+    @if (_quadro is null)
+    {
+        <p class="carregando">Carregando…</p>
+    }
+    else if (_quadro.Pendentes == 0 && _quadro.Concluidas.Count == 0)
+    {
+        <div class="cartao modulo__vazio">
+            <p class="vazio">Nenhuma tarefa ainda. Escreva acima ou use <AtalhoCaptura />: <em>tarefa pagar condomínio sexta</em></p>
+        </div>
+    }
+    else
+    {
+        <div class="grupos">
+            @if (_quadro.Pendentes == 0)
+            {
+                <div class="cartao modulo__vazio"><p class="vazio">Tudo em dia. Nada pendente.</p></div>
+            }
+
+            @Grupo("Atrasadas", _quadro.Atrasadas, "grupo--alerta")
+            @Grupo("Hoje", _quadro.ParaHoje)
+
+            @foreach (var dia in _quadro.Proximas.GroupBy(t => t.Prazo!.Value))
+            {
+                @Grupo(NomeDia(dia.Key), dia.ToList())
+            }
+
+            @Grupo("Sem prazo", _quadro.SemPrazo)
+
+            @if (_quadro.Concluidas.Count > 0)
+            {
+                <section class="grupo grupo--feitas">
+                    <button type="button" class="grupo__alternar" aria-expanded="@_mostrarFeitas" @onclick="() => _mostrarFeitas = !_mostrarFeitas">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
+                             style="transform: rotate(@(_mostrarFeitas ? 90 : 0)deg)"><path d="M9 6l6 6-6 6" /></svg>
+                        Concluídas nos últimos @QuadroTarefas.DiasDeConcluidas dias
+                        <span class="grupo__contagem">@_quadro.Concluidas.Count</span>
+                    </button>
+                    @if (_mostrarFeitas)
+                    {
+                        <ul class="grupo__lista">
+                            @foreach (var t in _quadro.Concluidas)
+                            {
+                                <ItemTarefa @key="t.Id" Item="t" Hoje="_quadro.Hoje" AoAlternar="Alternar" AoMudarPrazo="MudarPrazo" />
+                            }
+                        </ul>
+                    }
+                </section>
+            }
+        </div>
+    }
+</main>
+
+@code {
+    private QuadroTarefas? _quadro;
+    private ContextoCaptura _ctx = ContextoCaptura.Vazio(EventosFavoa.Hoje);
+    private string _nova = "";
+    private Interpretacao? _previa;
+    private bool _mostrarFeitas;
+    private bool _salvando;
+    private bool _soMinhas;
+
+    // Detalhes (horário, lembrete, quem faz). Quando preenchidos, valem mais que a frase.
+    private bool _detalhes;
+    private DateOnly? _prazo;
+    private TimeOnly? _hora;
+    private int? _aviso;
+    private IReadOnlyList<Guid> _responsaveis = [];
+
+    private string Exemplo => _ctx.Pessoas.Count > 1 ? "@" + _ctx.Pessoas[^1].Nome.ToLowerInvariant() : "";
+
+    /// <summary>A frase com o que foi escolhido nos detalhes por cima.</summary>
+    private Interpretacao? Final
+    {
+        get
+        {
+            if (_previa is not { } p) return null;
+            if (!_detalhes) return p;
+            var f = p with
+            {
+                Prazo = _prazo ?? p.Prazo,
+                Hora = _hora ?? p.Hora,
+                AvisoMinutos = _aviso ?? p.AvisoMinutos,
+                Responsaveis = _responsaveis.Count > 0 ? _responsaveis : p.Responsaveis,
+            };
+            // Erro de horário/aviso da frase pode ter sido resolvido nos campos; os outros (título, @pessoa) continuam.
+            var erroDaFrase = p.Aviso is { } a && !a.StartsWith("Para ") && !a.StartsWith("O aviso") ? a : null;
+            return f with { Aviso = erroDaFrase ?? AvisoTarefa.Validar(f.Prazo, f.Hora, f.AvisoMinutos) };
+        }
+    }
+
+    private void AlternarDetalhes()
+    {
+        _detalhes = !_detalhes;
+        if (!_detalhes) return;
+        // Abre já com o que a frase disse.
+        _prazo = _previa?.Prazo;
+        _hora = _previa?.Hora;
+        _aviso = _previa?.AvisoMinutos;
+        _responsaveis = _previa?.Responsaveis ?? [];
+    }
+
+    private string ResumoPrevia(Interpretacao f)
+    {
+        var partes = new List<string> { f.Prazo is { } p ? PrazoCurto(p) : "sem prazo" };
+        if (f.Hora is { } h) partes.Add(h.ToString("HH:mm"));
+        if (f.AvisoMinutos is { } a) partes.Add("lembrete " + AvisoTarefa.Rotulo(a).ToLowerInvariant());
+        if (f.Responsaveis.Count > 0)
+            partes.Add(string.Join(" e ", _ctx.Pessoas.Where(x => f.Responsaveis.Contains(x.Id)).Select(x => x.Nome)));
+        return string.Join(" · ", partes);
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Eventos.RegistroSalvo += Recarregar;
+        _ctx = await Servico.ObterContextoAsync(EventosFavoa.Hoje);
+        await Recarregar();
+    }
+
+    private async Task Recarregar()
+    {
+        _quadro = await Servico.ObterQuadroTarefasAsync(EventosFavoa.Hoje);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private RenderFragment Grupo(string titulo, IReadOnlyList<TarefaItem> todos, string classe = "") => __builder =>
+    {
+        var itens = _soMinhas ? todos.Where(t => t.EhDe(PessoaAtual.Id)).ToList() : todos;
+        if (itens.Count == 0) return;
+        <section class="grupo @classe" aria-label="@titulo">
+            <h2 class="grupo__titulo">@titulo <span class="grupo__contagem">@itens.Count</span></h2>
+            @if (titulo == "Atrasadas")
+            {
+                <div class="grupo__acoes" role="group" aria-label="Resolver as atrasadas de uma vez">
+                    <button type="button" class="botao botao--pequeno" @onclick="() => AdiarTodas(itens, 0)">Passar tudo para hoje</button>
+                    <button type="button" class="botao botao--pequeno botao--fantasma" @onclick="() => AdiarTodas(itens, 1)">Para amanhã</button>
+                </div>
+            }
+            <ul class="grupo__lista">
+                @foreach (var t in itens)
+                {
+                    <ItemTarefa @key="t.Id" Item="t" Hoje="_quadro!.Hoje" AoAlternar="Alternar" AoMudarPrazo="MudarPrazo" />
+                }
+            </ul>
+        </section>
+    };
+
+    // ---------- Criar ----------
+
+    private void AoDigitar(ChangeEventArgs e)
+    {
+        _nova = e.Value?.ToString() ?? "";
+        _previa = string.IsNullOrWhiteSpace(_nova) ? null : InterpretadorFrase.Interpretar(ComoTarefa(_nova), _ctx);
+    }
+
+    /// <summary>A frase vira "tarefa ..." se a pessoa não escreveu a palavra-chave.</summary>
+    private static string ComoTarefa(string texto)
+    {
+        var norm = Texto.Normalizar(texto);
+        return norm.StartsWith("tarefa ") || norm.StartsWith("lembrar de ") || norm.StartsWith("lembrete ")
+            ? texto
+            : "tarefa " + texto;
+    }
+
+    private async Task AoTeclar(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await Criar();
+        else if (e.Key == "Escape") { _nova = ""; _previa = null; }
+    }
+
+    private async Task Criar()
+    {
+        if (_salvando || Final is not { PodeSalvar: true } previa) return;
+        _salvando = true;
+        try
+        {
+            var r = await Servico.RegistrarAsync(previa);
+            Eventos.MostrarMensagem(r.Mensagem, r.Sucesso ? r.Criado : null);
+            if (!r.Sucesso) return;
+            _nova = "";
+            _previa = null;
+            _detalhes = false;
+            _prazo = null; _hora = null; _aviso = null; _responsaveis = [];
+            await Eventos.NotificarRegistroSalvoAsync();
+        }
+        finally { _salvando = false; }
+    }
+
+    // ---------- Ações nos itens ----------
+
+    private async Task Alternar(TarefaItem t)
+    {
+        await Servico.AlternarTarefaAsync(t.Id, EventosFavoa.Hoje);
+        Eventos.MostrarMensagem(t.Concluida ? $"\"{t.Titulo}\" voltou para pendentes." : $"\"{t.Titulo}\" concluída.");
+        await Eventos.NotificarRegistroSalvoAsync();
+    }
+
+    private async Task MudarPrazo((TarefaItem Item, DateOnly? Prazo) mudanca)
+    {
+        var r = await Servico.DefinirPrazoTarefaAsync(mudanca.Item.Id, mudanca.Prazo);
+        Eventos.MostrarMensagem(r.Mensagem);
+        await Eventos.NotificarRegistroSalvoAsync();
+    }
+
+    private async Task AdiarTodas(IReadOnlyList<TarefaItem> itens, int dias)
+    {
+        var alvo = EventosFavoa.Hoje.AddDays(dias);
+        foreach (var t in itens.ToList()) await Servico.DefinirPrazoTarefaAsync(t.Id, alvo);
+        Eventos.MostrarMensagem($"{Plural(itens.Count, "tarefa passou", "tarefas passaram")} para {(dias == 0 ? "hoje" : "amanhã")}.");
+        await Eventos.NotificarRegistroSalvoAsync();
+    }
+
+    // ---------- Texto ----------
+
+    private static string Plural(int n, string um, string varios) => n == 1 ? $"1 {um}" : $"{n} {varios}";
+
+    private static string NomeDia(DateOnly dia)
+    {
+        var hoje = EventosFavoa.Hoje;
+        if (dia == hoje.AddDays(1)) return "Amanhã";
+        var formato = dia.DayNumber - hoje.DayNumber < 7 ? "dddd" : "dddd, d 'de' MMM";
+        var texto = dia.ToString(formato, new CultureInfo("pt-BR")).Replace(".", "");
+        return char.ToUpper(texto[0]) + texto[1..];
+    }
+
+    private static string PrazoCurto(DateOnly p)
+    {
+        var hoje = EventosFavoa.Hoje;
+        if (p == hoje) return "hoje";
+        if (p == hoje.AddDays(1)) return "amanhã";
+        return p.ToString("ddd, dd/MM", new CultureInfo("pt-BR"));
+    }
+
+    public void Dispose() => Eventos.RegistroSalvo -= Recarregar;
+}

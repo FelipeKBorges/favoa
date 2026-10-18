@@ -1,0 +1,112 @@
+@using Favoa.Core.Fitness
+
+<section class="cartao ficha-editor" aria-label="Editar ficha">
+    <div class="campo">
+        <label for="ficha-nome">Nome da ficha</label>
+        <input id="ficha-nome" type="text" placeholder="Treino A — peito e tríceps" @bind="_nome" @bind:event="oninput" />
+    </div>
+
+    <div class="ficha-editor__cabecalho" aria-hidden="true">
+        <span>Exercício</span><span>Tipo</span><span>Séries</span><span>Reps</span><span>Carga kg</span><span>Min</span><span></span>
+    </div>
+
+    <ul class="ficha-editor__itens">
+        @foreach (var (item, i) in _itens.Select((x, i) => (x, i)))
+        {
+            <li class="ficha-editor__item" @key="item">
+                <input type="text" list="lista-exercicios" aria-label="Exercício" placeholder="Ex.: supino reto" @bind="item.Exercicio" @bind:after="() => Inferir(item)" />
+                <select aria-label="Tipo" @bind="item.Tipo">
+                    <option value="@TipoExercicio.Forca">Força</option>
+                    <option value="@TipoExercicio.Cardio">Cardio</option>
+                </select>
+                <input type="number" min="0" aria-label="Séries" @bind="item.Series" disabled="@(item.Tipo == TipoExercicio.Cardio)" />
+                <input type="number" min="0" aria-label="Repetições" @bind="item.Repeticoes" disabled="@(item.Tipo == TipoExercicio.Cardio)" />
+                <input type="number" min="0" step="0.5" aria-label="Carga em kg" @bind="item.CargaKg" disabled="@(item.Tipo == TipoExercicio.Cardio)" />
+                <input type="number" min="0" aria-label="Minutos" @bind="item.Minutos" disabled="@(item.Tipo == TipoExercicio.Forca)" />
+                <button type="button" class="botao-icone botao-icone--discreto" aria-label="Remover exercício" @onclick="() => _itens.RemoveAt(i)">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+                </button>
+            </li>
+        }
+    </ul>
+
+    <button type="button" class="botao botao--fantasma ficha-editor__mais" @onclick="Adicionar">+ Exercício</button>
+
+    @if (_erro is not null)
+    {
+        <p class="captura__aviso" role="alert">@_erro</p>
+    }
+
+    <div class="dados__acoes">
+        <button type="button" class="botao botao--primario" @onclick="Salvar">Salvar ficha</button>
+        <button type="button" class="botao botao--fantasma" @onclick="AoCancelar">Cancelar</button>
+        @if (Ficha.Id is { } id)
+        {
+            <span class="edicao__espaco"></span>
+            @if (_confirmar)
+            {
+                <button type="button" class="botao botao--perigo" @onclick="() => AoExcluir.InvokeAsync(id)">Apagar ficha</button>
+                <button type="button" class="botao botao--fantasma" @onclick="() => _confirmar = false">Manter</button>
+            }
+            else
+            {
+                <button type="button" class="botao botao--fantasma botao--perigo-texto" @onclick="() => _confirmar = true">Excluir</button>
+            }
+        }
+    </div>
+</section>
+
+@code {
+    [Parameter, EditorRequired] public FichaEdicao Ficha { get; set; } = null!;
+    [Parameter] public IReadOnlyList<ExercicioResumo> Exercicios { get; set; } = [];
+    [Parameter] public Func<FichaEdicao, Task<string?>> AoSalvar { get; set; } = _ => Task.FromResult<string?>(null);
+    [Parameter] public EventCallback AoCancelar { get; set; }
+    [Parameter] public EventCallback<Guid> AoExcluir { get; set; }
+
+    private sealed class Item
+    {
+        public string Exercicio { get; set; } = "";
+        public TipoExercicio Tipo { get; set; }
+        public int? Series { get; set; } = 3;
+        public int? Repeticoes { get; set; } = 10;
+        public decimal? CargaKg { get; set; }
+        public int? Minutos { get; set; }
+    }
+
+    private string _nome = "";
+    private List<Item> _itens = [];
+    private string? _erro;
+    private bool _confirmar;
+
+    private FichaEdicao? _origem;
+
+    protected override void OnParametersSet()
+    {
+        // Só recarrega quando chega outra ficha; re-renderizações do pai não apagam o que está sendo digitado.
+        if (ReferenceEquals(_origem, Ficha)) return;
+        _origem = Ficha;
+        _nome = Ficha.Nome;
+        _itens = Ficha.Itens.Select(i => new Item
+        {
+            Exercicio = i.Exercicio, Tipo = i.Tipo, Series = i.Series, Repeticoes = i.Repeticoes, CargaKg = i.CargaKg, Minutos = i.Minutos,
+        }).ToList();
+        if (_itens.Count == 0) _itens.Add(new Item());
+    }
+
+    private void Adicionar() => _itens.Add(new Item());
+
+    /// <summary>Exercício já conhecido traz o tipo dele; nome novo de cardio ("esteira") vira cardio.</summary>
+    private void Inferir(Item item)
+    {
+        var conhecido = Exercicios.FirstOrDefault(e => Texto.Normalizar(e.Nome) == Texto.Normalizar(item.Exercicio));
+        item.Tipo = conhecido?.Tipo ?? GruposMusculares.TipoPorGrupo(GruposMusculares.Inferir(item.Exercicio));
+        if (item.Tipo == TipoExercicio.Cardio) { item.Series = null; item.Repeticoes = null; item.CargaKg = null; item.Minutos ??= 20; }
+    }
+
+    private async Task Salvar()
+    {
+        var edicao = new FichaEdicao(Ficha.Id, _nome,
+            _itens.Select(i => new ItemFichaEdicao(i.Exercicio, i.Tipo, i.Series, i.Repeticoes, i.CargaKg, i.Minutos)).ToList());
+        _erro = await AoSalvar(edicao);
+    }
+}

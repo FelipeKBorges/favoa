@@ -1,0 +1,246 @@
+@using Favoa.Core.Acesso
+@using Favoa.Core.Pessoas
+@inject IAcessoServico Acesso
+@inject IPessoaAtual PessoaAtual
+@inject EventosFavoa Eventos
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<section class="cartao dados__bloco" aria-labelledby="t-pessoas">
+    <div class="dados__titulo-linha">
+        <h2 id="t-pessoas" class="rotulo">Pessoas e acesso</h2>
+        @if (Dono && _edicao is null && _estado is not null)
+        {
+            <button type="button" class="botao botao--fantasma botao--pequeno" @onclick="NovaPessoa">+ Adicionar pessoa</button>
+        }
+    </div>
+
+    @if (_estado is null || _eu is null)
+    {
+        <p class="carregando">Carregando…</p>
+    }
+    else
+    {
+        <p class="dados__dica">
+            <strong>@_eu.FamiliaNome</strong>. Finanças, tarefas e projetos são da casa. Treino, dieta, peso, hábitos, água e lembretes são de cada um.
+            Cada pessoa entra com o próprio e-mail e senha (o aparelho fica lembrado por 30 dias).
+        </p>
+
+        <div class="conta">
+            <div class="conta__linha"><span class="rotulo">Seu e-mail</span><span>@_eu.Email @if (_eu.Dono) { <span class="etiqueta-arquivada">dono da casa</span> }</span></div>
+            @if (!_trocandoSenha)
+            {
+                <div class="cadastro__acoes">
+                    <button type="button" class="botao botao--fantasma botao--pequeno" @onclick="() => _trocandoSenha = true">Trocar senha</button>
+                    <button type="button" class="botao botao--fantasma botao--pequeno" @onclick="Desconectar">Sair de todos os aparelhos</button>
+                    <button type="button" class="botao botao--fantasma botao--pequeno" @onclick='() => Nav.NavigateTo("/sair", forceLoad: true)'>Sair neste aparelho</button>
+                </div>
+            }
+            else
+            {
+                <form class="cadastro__form" @onsubmit="TrocarSenha" @onsubmit:preventDefault>
+                    <div class="pin-form">
+                        <label class="mini mini--pin"><span>Senha atual</span>
+                            <input type="password" autocomplete="current-password" maxlength="128" @bind="_senhaAtual" @bind:event="oninput" />
+                        </label>
+                        <label class="mini mini--pin"><span>Senha nova (8 ou mais)</span>
+                            <input type="password" autocomplete="new-password" maxlength="128" @bind="_senhaNova" @bind:event="oninput" />
+                        </label>
+                        <label class="mini mini--pin"><span>Repita a senha nova</span>
+                            <input type="password" autocomplete="new-password" maxlength="128" @bind="_senhaConfirmacao" @bind:event="oninput" />
+                        </label>
+                    </div>
+                    @if (_erroSenha is not null) { <p class="cadastro__erro" role="alert">@_erroSenha</p> }
+                    <div class="cadastro__acoes">
+                        <button type="submit" class="botao botao--primario botao--pequeno">Salvar senha</button>
+                        <button type="button" class="botao botao--fantasma botao--pequeno" @onclick="CancelarSenha">Cancelar</button>
+                    </div>
+                </form>
+            }
+        </div>
+
+        @if (_edicao is { Id: null } nova) { @FormularioPessoa(nova) }
+
+        <ul class="cadastro__lista">
+            @foreach (var p in _estado.Pessoas)
+            {
+                <li class="cadastro__item pessoa-linha">
+                    @if (_edicao is { } e && e.Id == p.Id)
+                    {
+                        @FormularioPessoa(e)
+                    }
+                    else
+                    {
+                        <span class="avatar" style="--cor-pessoa:@p.Cor" aria-hidden="true">@p.Inicial</span>
+                        <div class="cadastro__texto">
+                            <span class="cadastro__nome">@p.Nome @if (p.Id == PessoaAtual.Id) { <span class="etiqueta-arquivada">você</span> }</span>
+                            <span class="cadastro__sub">@(p.TemAcesso ? "Tem acesso com o próprio e-mail e senha" : "Ainda sem acesso: convide para criar o login")</span>
+                        </div>
+                        @if (Dono)
+                        {
+                            <div class="cadastro__acoes">
+                                @if (!p.TemAcesso)
+                                {
+                                    <button type="button" class="botao botao--fantasma botao--pequeno" @onclick="() => Convidar(p)">Convidar</button>
+                                }
+                                <button type="button" class="botao-icone" aria-label="Editar @p.Nome" @onclick="() => EditarPessoa(p)">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z" /></svg>
+                                </button>
+                                @if (!p.TemAcesso)
+                                {
+                                    <button type="button" class="botao-icone" aria-label="Excluir @p.Nome" @onclick="() => ExcluirPessoa(p)">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12" /></svg>
+                                    </button>
+                                }
+                            </div>
+                        }
+                    }
+                </li>
+                @if (_convite is { } c && c.PessoaId == p.Id)
+                {
+                    <li class="convite" role="status">
+                        <p><strong>Link de @p.Nome</strong> (vale por 7 dias, uso único):</p>
+                        <input class="convite__link" type="text" readonly value="@LinkDe(c)" @onfocus="SelecionarLink" aria-label="Link do convite de @p.Nome" />
+                        <label class="dados__dica" for="convite-endereco">Endereço do Fávoa para @p.Nome (no celular dela, o endereço do Tailscale, ex.: <code>https://pc.tailnet.ts.net</code>)</label>
+                        <input id="convite-endereco" class="convite__link" type="text" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="@Origem" value="@_endereco" @onchange="MudarEndereco" />
+                        <button type="button" class="botao botao--fantasma botao--pequeno" @onclick="() => _convite = null">Fechar</button>
+                    </li>
+                }
+            }
+        </ul>
+    }
+</section>
+
+@code {
+    private sealed class EdicaoPessoa
+    {
+        public Guid? Id { get; init; }
+        public string Nome { get; set; } = "";
+        public string Cor { get; set; } = CoresPessoa.Padrao[1];
+        public string? Erro { get; set; }
+    }
+
+    private sealed record ConviteGerado(Guid PessoaId, string Codigo);
+
+    private EstadoAcesso? _estado;
+    private DadosUsuario? _eu;
+    private EdicaoPessoa? _edicao;
+    private ConviteGerado? _convite;
+    private bool _trocandoSenha;
+    private string _senhaAtual = "", _senhaNova = "", _senhaConfirmacao = "";
+    private string? _erroSenha;
+
+    private bool Dono => _eu?.Dono == true;
+    private Guid FamiliaId => PessoaAtual.FamiliaId ?? Guid.Empty;
+    private string Origem => Nav.BaseUri.TrimEnd('/');
+    private string _endereco = "";   // endereço que a pessoa convidada usa (lembrado neste aparelho)
+    private string BaseDoLink => string.IsNullOrWhiteSpace(_endereco) ? Origem : _endereco.Trim().TrimEnd('/');
+    private string LinkDe(ConviteGerado c) => $"{BaseDoLink}/convite/{c.Codigo}";
+
+    private async Task MudarEndereco(ChangeEventArgs e)
+    {
+        var v = (e.Value?.ToString() ?? "").Trim();
+        if (v.Length > 0 && !v.Contains("://")) v = "https://" + v;
+        _endereco = v;
+        try { await JS.InvokeVoidAsync("localStorage.setItem", "favoa_endereco_convite", v); } catch { }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var usuario = (PessoaAtual as Favoa.Web.PessoaDoUsuario)?.UsuarioId;
+        _eu = usuario is { } id ? await Acesso.ObterUsuarioAsync(id) : null;
+        _estado = await Acesso.ObterEstadoAsync(PessoaAtual.FamiliaId);
+    }
+
+    private void NovaPessoa()
+    {
+        var usadas = _estado?.Pessoas.Select(p => p.Cor).ToHashSet() ?? [];
+        _convite = null;
+        _edicao = new EdicaoPessoa { Cor = CoresPessoa.Padrao.FirstOrDefault(c => !usadas.Contains(c)) ?? CoresPessoa.Padrao[1] };
+    }
+
+    private void EditarPessoa(PessoaInfo p) { _convite = null; _edicao = new EdicaoPessoa { Id = p.Id, Nome = p.Nome, Cor = p.Cor }; }
+
+    private async Task SalvarPessoa()
+    {
+        if (_edicao is not { } e) return;
+        var r = await Acesso.SalvarPessoaAsync(FamiliaId, e.Id, e.Nome, e.Cor);
+        if (!r.Sucesso) { e.Erro = r.Mensagem; return; }
+        _edicao = null;
+        await Concluir(r);
+        // O nome e a cor do topo vêm do estado: recarrega para atualizar.
+        if (e.Id == PessoaAtual.Id) Nav.Refresh(forceReload: true);
+    }
+
+    private async Task ExcluirPessoa(PessoaInfo p) => await Concluir(await Acesso.ExcluirPessoaAsync(FamiliaId, p.Id));
+
+    private async Task Convidar(PessoaInfo p)
+    {
+        var usuario = (PessoaAtual as Favoa.Web.PessoaDoUsuario)?.UsuarioId;
+        if (usuario is not { } id) return;
+        var r = await Acesso.CriarConviteAsync(id, p.Id);
+        if (!r.Sucesso || r.Codigo is null) { Eventos.MostrarMensagem(r.Mensagem); return; }
+        _edicao = null;
+        if (_endereco.Length == 0)
+        {
+            try { _endereco = await JS.InvokeAsync<string?>("localStorage.getItem", "favoa_endereco_convite") ?? ""; } catch { }
+        }
+        _convite = new ConviteGerado(p.Id, r.Codigo);
+    }
+
+    private void SelecionarLink() { /* o campo é só leitura: o toque já seleciona no celular */ }
+
+    private async Task TrocarSenha()
+    {
+        if (_senhaNova != _senhaConfirmacao) { _erroSenha = "As duas senhas novas não batem."; return; }
+        var usuario = (PessoaAtual as Favoa.Web.PessoaDoUsuario)?.UsuarioId;
+        if (usuario is not { } id) return;
+        var r = await Acesso.TrocarSenhaAsync(id, _senhaAtual, _senhaNova);
+        if (!r.Sucesso) { _erroSenha = r.Mensagem; return; }
+        // A senha nova derruba todos os aparelhos, este também: entra de novo com a senha nova.
+        Nav.NavigateTo("/sair?aviso=senha", forceLoad: true);
+    }
+
+    private void CancelarSenha()
+    {
+        _trocandoSenha = false;
+        _senhaAtual = _senhaNova = _senhaConfirmacao = "";
+        _erroSenha = null;
+    }
+
+    private async Task Desconectar()
+    {
+        var usuario = (PessoaAtual as Favoa.Web.PessoaDoUsuario)?.UsuarioId;
+        if (usuario is not { } id) return;
+        await Acesso.DesconectarAparelhosAsync(id);
+        Nav.NavigateTo("/entrar", forceLoad: true);
+    }
+
+    private async Task Concluir(ResultadoRegistro r)
+    {
+        Eventos.MostrarMensagem(r.Mensagem);
+        _estado = await Acesso.ObterEstadoAsync(PessoaAtual.FamiliaId);
+    }
+
+    private RenderFragment FormularioPessoa(EdicaoPessoa e) => @<form class="cadastro__form" @onsubmit="SalvarPessoa" @onsubmit:preventDefault>
+        <div class="campo">
+            <label for="pessoa-nome">Nome</label>
+            <input id="pessoa-nome" type="text" autocomplete="off" maxlength="40" placeholder="Ex.: Eva" @bind="e.Nome" @bind:event="oninput" />
+        </div>
+        <fieldset class="cadastro__dias">
+            <legend>Cor</legend>
+            <div class="chips">
+                @foreach (var cor in CoresPessoa.Padrao)
+                {
+                    var ativa = string.Equals(cor, e.Cor, StringComparison.OrdinalIgnoreCase);
+                    <button type="button" class="cor-opcao @(ativa ? "cor-opcao--ativa" : "")" style="--cor-pessoa:@cor" aria-pressed="@ativa" aria-label="Cor @cor" @onclick="() => e.Cor = cor"></button>
+                }
+            </div>
+        </fieldset>
+        @if (e.Erro is not null) { <p class="cadastro__erro" role="alert">@e.Erro</p> }
+        <div class="cadastro__acoes">
+            <button type="submit" class="botao botao--primario botao--pequeno">Salvar</button>
+            <button type="button" class="botao botao--fantasma botao--pequeno" @onclick="() => _edicao = null">Cancelar</button>
+        </div>
+    </form>;
+}
