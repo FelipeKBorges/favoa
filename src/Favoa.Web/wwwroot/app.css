@@ -2161,3 +2161,13 @@ a.botao--primario, a.botao--primario:visited { color: var(--mel-tinta); }
 .convite { list-style: none; display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 14px; border: 1px dashed var(--borda-forte); }
 .convite p { margin: 0; }
 .convite__link { width: 100%; min-height: 44px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--borda-forte); background: var(--fundo); color: var(--texto); font-size: 14px; }
+
+/* Busca de alimento dentro da refeição: o .busca (flex-basis 180px) não pode esticar na coluna */
+.busca-alimento .busca { flex: 0 0 auto; }
+.busca-alimento__recentes { margin: 2px 0; }
+.refeicao__itens li { padding: 4px 0; }
+@media (max-width: 760px) {
+  .refeicao__itens li { flex-wrap: wrap; gap: 0 12px; }
+  .refeicao__alimento { flex: 1 1 100%; padding-top: 6px; }
+  .refeicao__itens li .dados__meta { flex: 1 1 0; min-width: 0; }
+}
