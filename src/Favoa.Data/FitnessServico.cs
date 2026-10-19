@@ -272,7 +272,88 @@ public sealed class FitnessServico(IDbContextFactory<FavoaDbContext> fabrica, Fa
     public async Task<IReadOnlyList<AlimentoResumo>> BuscarAlimentosAsync(string texto, int limite = 12, CancellationToken ct = default)
     {
         await using var db = await fabrica.AbrirAsync(pessoa, ct);
-        return await ResumirComPorcoesAsync(db, await Buscar(db, texto, limite, ct), ct);
+        var exatos = await Buscar(db, texto, limite, ct);
+        if (exatos.Count > 0) return await ResumirComPorcoesAsync(db, exatos, ct);
+        // Nada exato: tenta sinônimos, parte do que foi escrito e erro de digitação, e avisa que é aproximado.
+        var parecidos = await BuscarAproximado(db, texto, limite, ct);
+        var resumo = await ResumirComPorcoesAsync(db, parecidos, ct);
+        return resumo.Select(r => r with { Aproximado = true }).ToList();
+    }
+
+    /// <summary>Cru, crua e massa vão para o fim, a não ser que a pessoa tenha digitado isso.</summary>
+    private static bool PareceCruOuMassa(string nomeNormalizado, IReadOnlyCollection<string> termos) =>
+        !termos.Any(t => t is "cru" or "crua" or "massa") &&
+        nomeNormalizado.Split([' ', ','], StringSplitOptions.RemoveEmptyEntries).Any(w => w is "cru" or "crua" or "massa");
+
+    private static readonly HashSet<string> PalavrasVazias = ["de", "da", "do", "das", "dos", "com", "e", "a", "o", "na", "no", "em", "ao", "para", "tipo", "um", "uma"];
+
+    // Grupos de palavras que o brasileiro troca entre si (já sem acento).
+    private static readonly string[][] Sinonimos =
+    [
+        ["frango", "galinha"], ["aipim", "mandioca", "macaxeira"], ["bolacha", "biscoito"], ["refri", "refrigerante"],
+        ["mussarela", "mucarela", "muçarela", "queijo prato"], ["hamburguer", "hamburger", "burger", "burguer"],
+        ["requeijao", "catupiry"], ["salsicha", "vina"], ["suco", "sumo"], ["pao de sal", "pao frances", "paozinho"],
+        ["cafe com leite", "pingado"], ["tomate", "tomates"], ["batata doce", "batata-doce"], ["milho verde", "milho"],
+        ["bife", "carne"], ["linguica", "calabresa"], ["mortadela", "frios"], ["achocolatado", "nescau", "toddy"],
+    ];
+
+    internal static async Task<List<Alimento>> BuscarAproximado(FavoaDbContext db, string texto, int limite, CancellationToken ct)
+    {
+        var palavras = Texto.Normalizar(texto).Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
+        var termos = palavras.Where(p => !PalavrasVazias.Contains(p)).Select(t => t.Length > 3 ? t.TrimEnd('s') : t).Where(t => t.Length > 1).ToList();
+        if (termos.Count == 0) return [];
+
+        var alternativas = termos.Select(t => Sinonimos.FirstOrDefault(g => g.Contains(t))?.Distinct().ToArray() ?? [t]).ToList();
+        var minimo = Math.Max(1, (int)Math.Ceiling(termos.Count / 2.0));
+
+        var todos = await db.Alimentos.AsNoTracking().ToListAsync(ct);
+        var usos = await db.Consumos.GroupBy(c => c.AlimentoId).Select(g => new { g.Key, N = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.N, ct);
+
+        var pontuados = todos.Select(a =>
+            {
+                var nome = Texto.Normalizar(a.Fonte == FontesAlimento.OpenFoodFacts ? $"{a.Nome} {a.Grupo}" : a.Nome);
+                var palavrasDoNome = nome.Split([' ', ',', '(', ')', '/', '-'], StringSplitOptions.RemoveEmptyEntries);
+                double pontos = 0;
+                foreach (var alt in alternativas)
+                {
+                    if (alt.Any(x => nome.Contains(x))) pontos += 1;
+                    else if (alt.Any(x => x.Length >= 4 && palavrasDoNome.Any(w => PertoDe(x, w)))) pontos += 0.8;
+                }
+                return (Alimento: a, Pontos: pontos, Nome: nome);
+            })
+            .Where(x => x.Pontos >= minimo - 0.25 && x.Pontos > 0)
+            .ToList();
+
+        // Com uma só palavra e sem achado exato, só vale erro de digitação (não "qualquer coisa com essa letra").
+        return pontuados
+            .OrderByDescending(x => x.Pontos)
+            .ThenByDescending(x => usos.GetValueOrDefault(x.Alimento.Id))
+            .ThenByDescending(x => x.Alimento.Personalizado)
+            .ThenBy(x => PareceCruOuMassa(x.Nome, termos))
+            .ThenByDescending(x => x.Alimento.Fonte == FontesAlimento.Estimativa)
+            .ThenByDescending(x => x.Alimento.CodigoTaco is not null)
+            .ThenBy(x => x.Nome.Length)
+            .Take(limite)
+            .Select(x => x.Alimento)
+            .ToList();
+    }
+
+    /// <summary>Palavras a 1 letra de distância (até 6 letras) ou 2 (mais longas): "pasteu" acha "pastel".</summary>
+    public static bool PertoDe(string a, string b)
+    {
+        var max = a.Length <= 6 ? 1 : 2;
+        if (Math.Abs(a.Length - b.Length) > max) return false;
+        var d = new int[a.Length + 1, b.Length + 1];
+        for (var i = 0; i <= a.Length; i++) d[i, 0] = i;
+        for (var j = 0; j <= b.Length; j++) d[0, j] = j;
+        for (var i = 1; i <= a.Length; i++)
+            for (var j = 1; j <= b.Length; j++)
+            {
+                var custo = a[i - 1] == b[j - 1] ? 0 : 1;
+                d[i, j] = Math.Min(Math.Min(d[i - 1, j] + 1, d[i, j - 1] + 1), d[i - 1, j - 1] + custo);
+                if (i > 1 && j > 1 && a[i - 1] == b[j - 2] && a[i - 2] == b[j - 1]) d[i, j] = Math.Min(d[i, j], d[i - 2, j - 2] + 1);
+            }
+        return d[a.Length, b.Length] <= max;
     }
 
     /// <summary>
@@ -300,6 +381,7 @@ public sealed class FitnessServico(IDbContextFactory<FavoaDbContext> fabrica, Fa
             .ThenByDescending(x => noPlano.Contains(x.Alimento.Id))
             .ThenByDescending(x => x.Alimento.Personalizado)
             .ThenByDescending(x => x.Nome.StartsWith(termos[0]))
+            .ThenBy(x => PareceCruOuMassa(x.Nome, termos)) // "pastel" mostra o frito antes da massa crua
             .ThenByDescending(x => x.Alimento.CodigoTaco is not null) // TACO antes do IBGE quando empatam
             .ThenBy(x => x.Nome.Length)
             .Take(limite)

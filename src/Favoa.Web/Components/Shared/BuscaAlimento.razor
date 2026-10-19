@@ -24,6 +24,10 @@
                 </div>
             </div>
         }
+        @if (_resultados.Count > 0 && _resultados[0].Aproximado)
+        {
+            <p class="dados__meta busca-alimento__aviso-aprox">Não achei “@_texto.Trim()” exato. Parecidos:</p>
+        }
         @if (_resultados.Count > 0)
         {
             <ul class="busca-alimento__resultados" role="listbox" aria-label="Alimentos encontrados">
@@ -40,7 +44,35 @@
         }
         else if (_texto.Trim().Length >= 2 && !_buscando && _online is null)
         {
-            <p class="vazio">Nada na base do Fávoa.</p>
+            <p class="vazio">Nada parecido na base do Fávoa.</p>
+        }
+
+        @if (_texto.Trim().Length >= 2 && !_buscando)
+        {
+            @if (!_criando)
+            {
+                <button type="button" class="botao botao--fantasma botao--pequeno busca-alimento__criar" @onclick="AbrirCriar">Não achou? Criar “@_texto.Trim()”</button>
+            }
+            else
+            {
+                <form class="busca-alimento__novo" @onsubmit="SalvarNovo" @onsubmit:preventDefault>
+                    <label class="mini mini--largo"><span>Nome</span><input type="text" maxlength="120" @bind="_novoNome" @bind:event="oninput" /></label>
+                    <label class="mini"><span>Peso de 1 porção (g)</span><input type="number" min="1" step="any" inputmode="decimal" @bind="_novoGramas" @bind:event="oninput" /></label>
+                    <label class="mini"><span>Calorias da porção</span><input type="number" min="0" step="any" inputmode="decimal" @bind="_novoKcal" @bind:event="oninput" /></label>
+                    <details class="busca-alimento__novo-extra">
+                        <summary>Proteína, carboidrato e gordura (opcional)</summary>
+                        <label class="mini"><span>Proteína (g)</span><input type="number" min="0" step="any" inputmode="decimal" @bind="_novoP" @bind:event="oninput" /></label>
+                        <label class="mini"><span>Carboidrato (g)</span><input type="number" min="0" step="any" inputmode="decimal" @bind="_novoC" @bind:event="oninput" /></label>
+                        <label class="mini"><span>Gordura (g)</span><input type="number" min="0" step="any" inputmode="decimal" @bind="_novoG" @bind:event="oninput" /></label>
+                    </details>
+                    @if (_novoErro is not null) { <p class="captura__aviso">@_novoErro</p> }
+                    <div class="busca-alimento__novo-acoes">
+                        <button type="submit" class="botao botao--primario botao--pequeno" disabled="@(_novoNome.Trim().Length == 0 || _novoKcal is null || _novoGramas is not > 0)">Criar e usar</button>
+                        <button type="button" class="botao botao--fantasma botao--pequeno" @onclick="() => _criando = false">Cancelar</button>
+                    </div>
+                    <p class="dados__meta">Os valores são da porção inteira (ex.: 1 pastel de 100 g = 290 kcal). Você pode ajustar depois em Dieta → Alimentos.</p>
+                </form>
+            }
         }
 
         @if (_texto.Trim().Length >= 2 && !_buscando)
@@ -96,6 +128,10 @@
                     }
                 </select>
             </label>
+            @if (_escolhido.Fonte == "Estimativa")
+            {
+                <span class="dados__meta busca-alimento__aviso">Valor estimado (média de receitas comuns). Confira ou ajuste em Dieta → Alimentos.</span>
+            }
             @if (PorcaoEscolhida is { Estimada: true })
             {
                 <span class="dados__meta busca-alimento__aviso">Medida média do IBGE (estimativa). Ajuste em Dieta → Alimentos.</span>
@@ -142,6 +178,31 @@
     private int _destaque;
     private int _versao;
     private bool _buscando;
+    private bool _criando;
+    private string _novoNome = "";
+    private double? _novoGramas = 100, _novoKcal, _novoP, _novoC, _novoG;
+    private string? _novoErro;
+
+    private void AbrirCriar()
+    {
+        _novoNome = _texto.Trim();
+        _novoGramas = 100; _novoKcal = _novoP = _novoC = _novoG = null;
+        _novoErro = null;
+        _criando = true;
+    }
+
+    private async Task SalvarNovo()
+    {
+        if (_novoKcal is null || _novoGramas is not > 0) return;
+        var g = _novoGramas.Value;
+        double Por100(double? v) => Math.Round((v ?? 0) * 100 / g, 1);
+        var r = await Fitness.SalvarAlimentoAsync(new AlimentoEdicao(null, _novoNome, Por100(_novoKcal), Por100(_novoP), Por100(_novoC), Por100(_novoG), "Unidade", (int)Math.Round(g)));
+        if (!r.Sucesso) { _novoErro = r.Mensagem; return; }
+        var criado = (await Fitness.BuscarAlimentosAsync(_novoNome, 5)).FirstOrDefault(a => a.Personalizado) ?? (await Fitness.BuscarAlimentosAsync(_novoNome, 1)).FirstOrDefault();
+        _criando = false;
+        if (criado is not null) Escolher(criado);
+    }
+
     private ResultadoBuscaOnline? _online;
     private bool _buscandoOnline;
     private bool _salvandoOnline;
@@ -173,6 +234,7 @@
     {
         _texto = e.Value?.ToString() ?? "";
         _online = null;
+        _criando = false;
         var versao = ++_versao;
         _buscando = true;
         await Task.Delay(150);
@@ -234,5 +296,6 @@
         _texto = "";
         _resultados = [];
         _online = null;
+        _criando = false;
     }
 }

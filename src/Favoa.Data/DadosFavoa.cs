@@ -433,7 +433,7 @@ public sealed class DadosFavoa(IDbContextFactory<FavoaDbContext> fabrica, Opcoes
                     Gordura = x.Gordura, Fibra = x.Fibra, CodigoTaco = x.CodigoTaco, Personalizado = x.Personalizado,
                     NomePorcao = x.NomePorcao, GramasPorcao = x.GramasPorcao, CriadoEm = x.CriadoEm, Fonte = x.Fonte, CodigoExterno = x.CodigoExterno,
                     // TACO e IBGE são catálogo comum (sem família); o resto é da casa.
-                    FamiliaId = x.CodigoTaco is not null || x.Fonte == FontesAlimento.Ibge ? null : familiaId,
+                    FamiliaId = x.CodigoTaco is not null || x.Fonte == FontesAlimento.Ibge || x.Fonte == FontesAlimento.Estimativa ? null : familiaId,
                 }));
                 var idsAlimentos = pacote.Alimentos.Select(a => a.Id).ToHashSet();
                 db.Porcoes.AddRange((pacote.Porcoes ?? []).Where(x => idsAlimentos.Contains(x.AlimentoId) && x.Gramas > 0 && !string.IsNullOrWhiteSpace(x.Nome))

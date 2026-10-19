@@ -110,13 +110,13 @@ public sealed class FamiliasTests : IAsyncLifetime
         Assert.True(catalogoVisto > 0);
         Assert.Equal(catalogoVisto, (await Fitness(_bia).BuscarAlimentosAsync("arroz")).Count);
 
-        var r = await Fitness(_ana).SalvarAlimentoAsync(new AlimentoEdicao(null, "Bolo secreto da vovó", 350, 5, 50, 12, null, null));
+        var r = await Fitness(_ana).SalvarAlimentoAsync(new AlimentoEdicao(null, "Zebrolino secreto da vovó", 350, 5, 50, 12, null, null));
         Assert.True(r.Sucesso, r.Mensagem);
-        Assert.Single(await Fitness(_ana).BuscarAlimentosAsync("bolo secreto"));
-        Assert.Empty(await Fitness(_bia).BuscarAlimentosAsync("bolo secreto"));
+        Assert.Single(await Fitness(_ana).BuscarAlimentosAsync("zebrolino secreto"));
+        Assert.Empty(await Fitness(_bia).BuscarAlimentosAsync("zebrolino secreto"));
 
         await using var db = await _fabrica.CreateDbContextAsync();
-        Assert.Equal(_ana.FamiliaId, (await db.Alimentos.SingleAsync(x => x.Nome == "Bolo secreto da vovó")).FamiliaId);
+        Assert.Equal(_ana.FamiliaId, (await db.Alimentos.SingleAsync(x => x.Nome == "Zebrolino secreto da vovó")).FamiliaId);
         Assert.True(await db.Alimentos.AnyAsync(x => x.FamiliaId == null && x.CodigoTaco != null));
     }
 

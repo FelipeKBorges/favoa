@@ -152,6 +152,8 @@ public static class FontesAlimento
 {
     public const string Ibge = "IBGE";
     public const string OpenFoodFacts = "Open Food Facts";
+    /// <summary>Preparados comuns (pastel, esfiha, X-burger...) que as tabelas oficiais não trazem: valores médios estimados pelo Fávoa.</summary>
+    public const string Estimativa = "Estimativa";
 
     /// <summary>Rótulo curto da origem, para a busca e a lista de alimentos.</summary>
     public static string Rotulo(Alimento a) =>

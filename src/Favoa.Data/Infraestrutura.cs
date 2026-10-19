@@ -93,6 +93,9 @@ public static class InfraestruturaExtensions
         // Tabela do IBGE (POF 2008-2009): completa a TACO com preparações (frito, ensopado...). Entra também em bancos antigos.
         if (!await db.Alimentos.AnyAsync(a => a.Fonte == Favoa.Core.Fitness.FontesAlimento.Ibge))
             db.Alimentos.AddRange(LerIbge());
+        // Preparados comuns (estimativas): entram também em bancos antigos; só o que ainda não existe.
+        var jaTem = (await db.Alimentos.Where(a => a.Fonte == Favoa.Core.Fitness.FontesAlimento.Estimativa).Select(a => a.CodigoExterno).ToListAsync()).ToHashSet();
+        db.Alimentos.AddRange(LerPreparados().Where(a => !jaTem.Contains(a.CodigoExterno)));
 
         await db.SaveChangesAsync();
         await CarregarMedidasAsync(db);
@@ -162,6 +165,29 @@ public static class InfraestruturaExtensions
             .ToList();
     }
 
+    /// <summary>Preparados comuns que as tabelas oficiais não trazem (pastel de frango, esfiha, X-burger...): médias estimadas por 100 g.</summary>
+    public static IEnumerable<Favoa.Core.Fitness.Alimento> LerPreparados()
+    {
+        using var stream = typeof(InfraestruturaExtensions).Assembly.GetManifestResourceStream("Favoa.Data.preparados.json")
+                           ?? throw new InvalidOperationException("preparados.json não embutido");
+        var itens = System.Text.Json.JsonSerializer.Deserialize<List<ItemPreparado>>(stream,
+            new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)) ?? [];
+        return itens.Select(t => new Favoa.Core.Fitness.Alimento
+        {
+            Nome = t.Nome,
+            Grupo = t.Grupo,
+            Kcal = t.Kcal,
+            Proteina = t.Proteina,
+            Carboidrato = t.Carboidrato,
+            Gordura = t.Gordura,
+            Fibra = t.Fibra,
+            Fonte = Favoa.Core.Fitness.FontesAlimento.Estimativa,
+            CodigoExterno = Favoa.Core.Captura.Texto.Normalizar(t.Nome) is { Length: > 40 } cod ? cod[..40] : Favoa.Core.Captura.Texto.Normalizar(t.Nome),
+            NomePorcao = t.Porcao,
+            GramasPorcao = t.Gramas,
+        }).ToList();
+    }
+
     /// <summary>Tabela de Composição Nutricional dos Alimentos Consumidos no Brasil (IBGE, POF 2008-2009), por 100 g.</summary>
     public static IEnumerable<Favoa.Core.Fitness.Alimento> LerIbge()
     {
@@ -221,6 +247,7 @@ public static class InfraestruturaExtensions
         await db.SaveChangesAsync();
     }
 
+    private sealed record ItemPreparado(string Nome, string Grupo, double Kcal, double Proteina, double Carboidrato, double Gordura, double Fibra, string Porcao, int Gramas);
     private sealed record ItemIbge(string Codigo, string Nome, double Kcal, double Proteina, double Carboidrato, double Gordura, double Fibra);
 
     private sealed record ItemTaco(int Taco, string Nome, string Grupo, double? Kcal, double? Proteina, double? Carboidrato, double? Gordura, double? Fibra);

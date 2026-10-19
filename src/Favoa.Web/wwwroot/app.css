@@ -2216,3 +2216,15 @@ a.botao--primario, a.botao--primario:visited { color: var(--mel-tinta); }
   .ajustes-dieta { align-self: flex-start; }
   .ajustes-dieta__lista { left: 0; right: auto; }
 }
+
+/* Busca de alimento: aproximado e criar na hora */
+.busca-alimento__aviso-aprox { margin: 2px 0; }
+.busca-alimento__criar { align-self: flex-start; }
+.busca-alimento__novo { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; padding: 12px; background: var(--fundo); border: 1px solid var(--borda); border-radius: 12px; }
+.busca-alimento__novo .mini--largo { flex: 1 1 100%; }
+.busca-alimento__novo-extra { flex: 1 1 100%; display: flex; flex-wrap: wrap; gap: 10px; }
+.busca-alimento__novo-extra summary { flex: 1 1 100%; cursor: pointer; font-size: 14px; color: var(--texto-suave); min-height: 36px; display: flex; align-items: center; }
+.busca-alimento__novo-acoes { flex: 1 1 100%; display: flex; gap: 8px; }
+.busca-alimento__novo .dados__meta { flex: 1 1 100%; }
+.busca-alimento__novo input[type="text"] { width: 100%; }
+.busca-alimento__novo .mini input[type="number"] { width: 120px; }

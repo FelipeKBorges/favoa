@@ -77,6 +77,8 @@ public sealed record AlimentoResumo(
     /// <summary>TACO, IBGE, Open Food Facts ou Meu.</summary>
     public string Fonte { get; init; } = "";
     public string? Marca { get; init; }
+    /// <summary>Veio de uma busca aproximada (palavra parecida ou só parte do que foi digitado), não de um achado exato.</summary>
+    public bool Aproximado { get; init; }
     /// <summary>Medidas caseiras do alimento (a do cadastro próprio vem primeiro). Vazio = só gramas.</summary>
     public IReadOnlyList<PorcaoResumo> Porcoes { get; init; } = [];
     /// <summary>Como a pessoa lançou da última vez ("g", "ml" ou nome da medida) e quanto; a busca já abre assim.</summary>
