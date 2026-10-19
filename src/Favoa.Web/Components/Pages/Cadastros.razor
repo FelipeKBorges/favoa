@@ -1,12 +1,12 @@
 @page "/cadastros"
 @inject NavigationManager Nav
 
-<PageTitle>Cadastros · Fávoa</PageTitle>
+<PageTitle>Contas e categorias · Fávoa</PageTitle>
 
 <main class="modulo modulo--largo cadastros">
     <header class="pagina__topo">
         <div class="pagina__titulo">
-            <h1>Cadastros</h1>
+            <h1>Contas e categorias</h1>
         </div>
         <nav class="segmento cadastros__abas" aria-label="Seções dos cadastros">
             @foreach (var (chave, rotulo) in Abas)
@@ -30,7 +30,7 @@
     [SupplyParameterFromQuery(Name = "aba")] public string? AbaQuery { get; set; }
 
     private static readonly (string Chave, string Rotulo)[] Abas =
-        [("categorias", "Categorias"), ("contas", "Contas"), ("recorrentes", "Recorrentes"), ("lembretes", "Lembretes")];
+        [("categorias", "Categorias"), ("contas", "Contas"), ("recorrentes", "Contas fixas"), ("lembretes", "Lembretes")];
 
     private string Aba => Abas.Any(a => a.Chave == AbaQuery) ? AbaQuery! : "categorias";
 }

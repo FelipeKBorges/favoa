@@ -15,7 +15,7 @@
                 <h1 id="titulo-dia">@Saudacao</h1>
                 @if (_painel is not null)
                 {
-                    <p>Hoje a colmeia está em <strong>@_painel.Centro.Percentual%</strong>. Escolha um dia para ver e planejar.</p>
+                    <p>Hoje o resumo está em <strong>@_painel.Centro.Percentual%</strong>. Escolha um dia para ver e planejar.</p>
                 }
             </div>
             <EscolhaTela Tela="_preferencias.Tela" AoEscolher="TrocarTela" />
@@ -36,7 +36,7 @@ else
                 <h1 id="titulo-dia">@Saudacao</h1>
                 @if (_painel is not null)
                 {
-                    <p>Cada célula enche conforme você cumpre o dia. Hoje a colmeia está em <strong>@_painel.Centro.Percentual%</strong>.</p>
+                    <p>Cada bloco enche conforme você cumpre o dia. Hoje o resumo está em <strong>@_painel.Centro.Percentual%</strong>.</p>
                 }
             </div>
             <EscolhaTela Tela="_preferencias.Tela" AoEscolher="TrocarTela" />

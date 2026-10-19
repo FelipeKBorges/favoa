@@ -866,9 +866,9 @@ public sealed partial class FavoaServico(IDbContextFactory<FavoaDbContext> fabri
     {
         var nome = tipo == TipoLancamento.Receita ? "receita" : "despesa";
         var lista = tipo == TipoLancamento.Receita ? (await CategoriasPorUso(db, ct)).Receita : (await CategoriasPorUso(db, ct)).Despesa;
-        if (lista.Count == 0) return $"Nenhuma categoria de {nome} cadastrada. Crie em Cadastros > Categorias.";
+        if (lista.Count == 0) return $"Nenhuma categoria de {nome} cadastrada. Crie em Contas e categorias.";
         var inicio = string.IsNullOrWhiteSpace(pedida) ? $"Escolha a categoria de {nome}" : $"A categoria {pedida} não existe. Escolha uma de {nome}";
-        return $"{inicio}: {string.Join(", ", lista.Take(12))}{(lista.Count > 12 ? "…" : "")}. Para criar outra, use Cadastros > Categorias.";
+        return $"{inicio}: {string.Join(", ", lista.Take(12))}{(lista.Count > 12 ? "…" : "")}. Para criar outra, use Contas e categorias > Categorias.";
     }
 
     /// <summary>Busca ignorando maiúsculas e acentos. As listas são pequenas: a comparação é feita em memória.</summary>

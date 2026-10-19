@@ -28,7 +28,7 @@
         <div class="topo__fim">
             <span class="topo__data">@DataExtenso</span>
             <PessoaTopo />
-            <NavLink class="botao-icone topo__dados" href="cadastros" aria-label="Cadastros: categorias, contas, recorrentes e lembretes" title="Cadastros">
+            <NavLink class="botao-icone topo__dados" href="cadastros" aria-label="Contas e categorias: categorias, contas, contas fixas e lembretes" title="Contas e categorias">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0" /><circle cx="16" cy="6" r="2" /><circle cx="10" cy="12" r="2" /><circle cx="18" cy="18" r="2" /></svg>
             </NavLink>
             <NavLink class="botao-icone topo__dados" href="dados" aria-label="Seus dados: backup, exportar e importar" title="Seus dados">
@@ -87,7 +87,7 @@
         _ = InvokeAsync(StateHasChanged);
 
         // Com "Desfazer" o aviso fica um pouco mais na tela.
-        var duracao = desfazer is null ? 4000 : 8000;
+        var duracao = desfazer is null ? 5000 : 12000;
         _ = Task.Delay(duracao, token).ContinueWith(_ =>
         {
             if (token.IsCancellationRequested) return;

@@ -67,7 +67,7 @@
 @code {
     [Parameter, EditorRequired] public IReadOnlyList<ProgressoDia?> Dias { get; set; } = [];
     [Parameter] public string Area { get; set; } = CelulaColmeia.Hoje;
-    [Parameter] public string Titulo { get; set; } = "Colmeia";
+    [Parameter] public string Titulo { get; set; } = "Resumo do dia";
 
     private static readonly int[] Marcas = [0, 50, 100];
     private double LarguraCol => Dias.Count <= 1 ? 100 : 100.0 / (Dias.Count - 1);

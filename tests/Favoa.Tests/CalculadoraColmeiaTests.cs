@@ -55,7 +55,7 @@ public class CalculadoraColmeiaTests
 
         var centro = Celula(c, CelulaColmeia.Hoje);
         Assert.Equal(75, centro.Percentual);
-        Assert.Equal("2/4", centro.Valor);
+        Assert.Equal("2 de 4", centro.Valor);
     }
 
     [Fact]
@@ -71,13 +71,13 @@ public class CalculadoraColmeiaTests
     {
         var sem = CalculadoraColmeia.Calcular(new ResumoDoDia());
         Assert.Equal(EstadoCelula.Alerta, Celula(sem, CelulaColmeia.Treino).Estado);
-        Assert.EndsWith("/4", Celula(sem, CelulaColmeia.Hoje).Valor);
+        Assert.EndsWith(" de 4", Celula(sem, CelulaColmeia.Hoje).Valor);
 
         var com = CalculadoraColmeia.Calcular(new ResumoDoDia { TemTreinos = true, TreinosUltimos7Dias = 2, MetaTreinosSemana = 4, TreinouHoje = true });
         var treino = Celula(com, CelulaColmeia.Treino);
         Assert.Equal("2 de 4", treino.Valor);
         Assert.Equal(50, treino.Percentual);
-        Assert.EndsWith("/5", Celula(com, CelulaColmeia.Hoje).Valor);
+        Assert.EndsWith(" de 5", Celula(com, CelulaColmeia.Hoje).Valor);
     }
 
     [Fact]

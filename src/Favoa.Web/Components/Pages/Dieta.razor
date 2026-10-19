@@ -21,13 +21,27 @@
                 </p>
             }
         </div>
-        <nav class="segmento" aria-label="Seções da dieta">
-            @foreach (var (chave, rotulo) in Abas)
-            {
-                <a class="segmento__opcao @(Aba == chave || (Aba == "compras" && chave == "plano") ? "segmento__opcao--ativa" : "")" aria-current="@(Aba == chave ? "page" : null)"
-                   href="@Nav.GetUriWithQueryParameter("aba", chave == "hoje" ? null : chave)">@rotulo</a>
-            }
-        </nav>
+        @if (Aba == "hoje")
+        {
+            <details class="ajustes-dieta">
+                <summary class="botao botao--fantasma botao--pequeno">Ajustes da dieta</summary>
+                <div class="ajustes-dieta__lista">
+                    <a href="@Nav.GetUriWithQueryParameter("aba", "plano")"><strong>Plano</strong><span>o que comer em cada refeição</span></a>
+                    <a href="@Nav.GetUriWithQueryParameter("aba", "alimentos")"><strong>Alimentos</strong><span>consultar a base e criar os seus</span></a>
+                    <a href="@Nav.GetUriWithQueryParameter("aba", "metas")"><strong>Metas</strong><span>calorias, macros e água</span></a>
+                </div>
+            </details>
+        }
+        else
+        {
+            <nav class="segmento" aria-label="Seções da dieta">
+                @foreach (var (chave, rotulo) in Abas)
+                {
+                    <a class="segmento__opcao @(Aba == chave || (Aba == "compras" && chave == "plano") ? "segmento__opcao--ativa" : "")" aria-current="@(Aba == chave ? "page" : null)"
+                       href="@Nav.GetUriWithQueryParameter("aba", chave == "hoje" ? null : chave)">@(chave == "hoje" ? "← Dia" : rotulo)</a>
+                }
+            </nav>
+        }
     </header>
 
     @if (_dia is null)
@@ -51,28 +65,28 @@
             }
             <a class="botao botao--pequeno botao--fantasma @(EhHoje ? "dia-nav__fim" : "")" aria-label="Próximo dia" aria-disabled="@EhHoje" tabindex="@(EhHoje ? -1 : 0)" href="@(EhHoje ? null : LinkDia(_data.AddDays(1)))">›</a>
         </nav>
-        <div class="peso-compacto so-celular">
-            <button type="button" class="peso-compacto__linha" aria-expanded="@_pesoAberto" @onclick="() => _pesoAberto = !_pesoAberto">
-                <span>Peso</span>
-                <strong>@(_pesos?.Atual is { } pa ? $"{pa.Kg.ToString("0.0", PtBr)} kg" : "sem registro")</strong>
-                @if (Tendencia is { } trilha)
-                {
-                    <svg class="peso-tendencia" viewBox="0 0 100 28" width="84" height="28" preserveAspectRatio="none" aria-hidden="true"><polyline points="@trilha" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" /></svg>
-                }
-                <span class="peso-compacto__acao">@(_pesoAberto ? "Fechar" : "Atualizar")</span>
-            </button>
-            @if (_pesoAberto)
-            {
-                <div class="peso__registrar">
-                    <label class="mini mini--largo"><span>Peso de hoje (kg)</span>
-                        <input type="number" min="20" max="400" step="0.1" inputmode="decimal" @bind="_pesoHoje" @bind:event="oninput" @onkeydown="AoTeclarPeso" />
-                    </label>
-                    <button type="button" class="botao botao--pequeno botao--primario" disabled="@(_pesoHoje is null)" @onclick="RegistrarPeso">Salvar</button>
-                </div>
-            }
-        </div>
         <div class="dieta">
             <div class="dieta__principal">
+            <div class="peso-compacto so-celular">
+                <button type="button" class="peso-compacto__linha" aria-expanded="@_pesoAberto" @onclick="() => _pesoAberto = !_pesoAberto">
+                    <span>Peso</span>
+                    <strong>@(_pesos?.Atual is { } pa ? $"{pa.Kg.ToString("0.0", PtBr)} kg" : "sem registro")</strong>
+                    @if (Tendencia is { } trilha)
+                    {
+                        <svg class="peso-tendencia" viewBox="0 0 100 28" width="84" height="28" preserveAspectRatio="none" aria-hidden="true"><polyline points="@trilha" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" /></svg>
+                    }
+                    <span class="peso-compacto__acao">@(_pesoAberto ? "Fechar" : _pesos?.Atual is null ? "Registrar" : "Atualizar")</span>
+                </button>
+                @if (_pesoAberto)
+                {
+                    <div class="peso__registrar">
+                        <label class="mini mini--largo"><span>Peso de hoje (kg)</span>
+                            <input type="number" min="20" max="400" step="0.1" inputmode="decimal" @bind="_pesoHoje" @bind:event="oninput" @onkeydown="AoTeclarPeso" />
+                        </label>
+                        <button type="button" class="botao botao--pequeno botao--primario" disabled="@(_pesoHoje is null)" @onclick="RegistrarPeso">Salvar</button>
+                    </div>
+                }
+            </div>
                 <section class="cartao macros" aria-label="Totais do dia">
                     <div class="macros__topo">
                         <div class="anel-kcal @(_dia.MetaKcalDoDia > 0 && _dia.Total.Kcal > _dia.MetaKcalDoDia * 1.1 ? "anel-kcal--estourado" : "")" role="img" aria-label="@(_dia.MetaKcalDoDia > 0 ? $"{Pct(_dia.Total.Kcal, _dia.MetaKcalDoDia)} da meta de calorias" : "Calorias do dia")">

@@ -51,7 +51,7 @@ public static class CalculadoraColmeia
         var cheias = ativas.Count(c => c.Preenchimento >= 0.999);
 
         var centro = new CelulaColmeia(
-            CelulaColmeia.Hoje, "Hoje", $"{cheias}/{ativas.Length}", "células cheias", media);
+            CelulaColmeia.Hoje, "Hoje", $"{cheias} de {ativas.Length}", "metas do dia", media);
 
         return
         [

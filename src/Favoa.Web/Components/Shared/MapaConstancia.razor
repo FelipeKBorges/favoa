@@ -98,12 +98,12 @@
             var com = Dias.Where(p => p is not null).ToList();
             if (com.Count == 0) return "Constância: ainda sem registros.";
             var cheios = com.Count(p => p!.Geral >= 0.75);
-            return $"Constância: {com.Count} dias com registro, {cheios} com a colmeia acima de 75%.";
+            return $"Constância: {com.Count} dias com registro, {cheios} com o dia acima de 75%.";
         }
     }
 
     private static string Dica(DateOnly d, ProgressoDia? p) =>
-        d.ToString("ddd, dd/MM", PtBr) + ": " + (p is null ? "sem registro" : p.Percentual + "% da colmeia");
+        d.ToString("ddd, dd/MM", PtBr) + ": " + (p is null ? "sem registro" : p.Percentual + "% do dia");
 
     private static string F(double v) => v.ToString("0.#", Inv);
 }

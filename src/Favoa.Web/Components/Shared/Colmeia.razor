@@ -1,6 +1,6 @@
 @* Sete hexágonos em colmeia: duas colunas laterais deslocadas e a coluna central com "Hoje" no meio. *@
 <div class="colmeia-rolagem">
-    <div class="colmeia @(Completa ? "colmeia--completa" : "")" role="list" aria-label="Colmeia do dia">
+    <div class="colmeia @(Completa ? "colmeia--completa" : "")" role="list" aria-label="Resumo do dia">
         @for (var i = 0; i < Celulas.Count && i < Posicoes.Length; i++)
         {
             var c = Celulas[i];
@@ -25,6 +25,20 @@
             </div>
         }
     </div>
+
+    @* Celular: a colmeia encolhe, então o detalhe de cada célula vem aqui, em letra legível. *@
+    <ul class="colmeia__lista" aria-label="Detalhes do dia">
+        @foreach (var c in Celulas.Where(c => c.Chave != CelulaColmeia.Hoje))
+        {
+            <li>
+                <a class="colmeia__item @(c.Estado == EstadoCelula.Alerta ? "colmeia__item--alerta" : "")" href="@(Destino(c.Chave) ?? "")">
+                    <span class="colmeia__nome">@c.Rotulo</span>
+                    <span class="colmeia__valor">@c.Valor</span>
+                    <span class="colmeia__detalhe">@c.Detalhe</span>
+                </a>
+            </li>
+        }
+    </ul>
 </div>
 
 @code {

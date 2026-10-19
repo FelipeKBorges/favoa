@@ -100,7 +100,7 @@
             i = i with
             {
                 Aviso = _ctx.CategoriasDo(i.Tipo).Count == 0
-                    ? $"Nenhuma categoria de {(i.Tipo == TipoCaptura.Receita ? "receita" : "despesa")} cadastrada. Crie em Cadastros > Categorias."
+                    ? $"Nenhuma categoria de {(i.Tipo == TipoCaptura.Receita ? "receita" : "despesa")} cadastrada. Crie em Contas e categorias."
                     : "Escolha a categoria abaixo.",
             };
         return i;

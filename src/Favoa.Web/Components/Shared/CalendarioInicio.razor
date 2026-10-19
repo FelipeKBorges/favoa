@@ -457,7 +457,7 @@
     {
         var partes = new List<string> { d.Data.ToString("dddd, d 'de' MMMM", PtBr) };
         if (d.Data == Hoje) partes.Add("hoje");
-        if (d.Progresso is { } p) partes.Add($"colmeia {p.Percentual}%");
+        if (d.Progresso is { } p) partes.Add($"resumo {p.Percentual}%");
         if (itens > 0) partes.Add(itens == 1 ? "1 item" : $"{itens} itens");
         return string.Join(", ", partes);
     }

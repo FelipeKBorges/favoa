@@ -1,9 +1,9 @@
-@* Cada pessoa escolhe a tela inicial: a colmeia do dia ou o calendário. Fica salvo para ela. *@
+@* Cada pessoa escolhe a tela inicial: o resumo do dia ou o calendário. Fica salvo para ela. *@
 <div class="segmento escolha-tela" role="radiogroup" aria-label="Tela inicial">
     <button type="button" role="radio" aria-checked="@(Tela == TelaInicial.Colmeia)"
             class="segmento__opcao @(Tela == TelaInicial.Colmeia ? "segmento__opcao--ativa" : "")" @onclick="() => AoEscolher.InvokeAsync(TelaInicial.Colmeia)">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l8.5 5v10L12 22l-8.5-5V7z" /></svg>
-        Colmeia
+        Resumo
     </button>
     <button type="button" role="radio" aria-checked="@(Tela == TelaInicial.Calendario)"
             class="segmento__opcao @(Tela == TelaInicial.Calendario ? "segmento__opcao--ativa" : "")" @onclick="() => AoEscolher.InvokeAsync(TelaInicial.Calendario)">

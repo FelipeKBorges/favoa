@@ -2003,7 +2003,13 @@ a.botao { display: inline-flex; align-items: center; text-decoration: none; colo
 .agora-botao { display: block; width: 100%; margin: .5rem 0; min-height: 44px; background: var(--superficie); color: var(--texto-2); border: 1px solid var(--borda); border-radius: 12px; font: inherit; }
 @media (max-width: 760px) {
   .agora--recolhido { display: none; }
-  .colmeia { zoom: 0.6; }
+  .colmeia { zoom: 0.74; }
+  .colmeia-rolagem { flex-direction: column; align-items: center; }
+  .hex__rotulo { font-size: 15px; letter-spacing: .04em; }
+  .hex__valor { font-size: 24px; }
+  .hex--centro .hex__valor { font-size: 40px; }
+  .hex__detalhe { display: none; }
+  .hex--centro .hex__detalhe { display: block; font-size: 14px; }
 }
 
 /* "+" do celular: grade de blocos em vez de abas. */
@@ -2184,3 +2190,29 @@ a.botao--primario, a.botao--primario:visited { color: var(--mel-tinta); }
 .painel__frase-texto span { font-size: 13px; color: var(--texto-suave); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .painel__ou { margin: .5rem 0 0; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--texto-apagado); }
 .extrato__todos { width: 100%; margin-top: 8px; }
+
+/* Lista de detalhes da colmeia (celular) */
+.colmeia__lista { list-style: none; margin: 12px 0 0; padding: 0; width: 100%; display: none; flex-direction: column; }
+@media (max-width: 760px) { .colmeia__lista { display: flex; } }
+.colmeia__item { display: grid; grid-template-columns: 1fr auto; gap: 0 12px; align-items: baseline; min-height: 56px; padding: 8px 4px; border-bottom: 1px solid var(--borda); color: var(--texto); text-decoration: none; }
+.colmeia__nome { font-weight: 600; font-size: 16px; }
+.colmeia__valor { font-family: var(--fonte-titulo); font-weight: 700; font-size: 17px; }
+.colmeia__detalhe { grid-column: 1 / -1; font-size: 14px; color: var(--texto-suave); }
+.colmeia__item--alerta .colmeia__detalhe { color: var(--alerta); }
+
+/* Dieta: ajustes escondidos num menu; no celular, a refeição vem antes dos totais */
+.ajustes-dieta { position: relative; align-self: center; }
+.ajustes-dieta summary { list-style: none; cursor: pointer; }
+.ajustes-dieta summary::-webkit-details-marker { display: none; }
+.ajustes-dieta__lista { position: absolute; right: 0; z-index: 20; margin-top: 6px; min-width: 260px; display: flex; flex-direction: column; padding: 6px; background: var(--superficie); border: 1px solid var(--borda-forte); border-radius: 14px; box-shadow: 0 12px 32px rgba(0,0,0,.4); }
+.ajustes-dieta__lista a { display: flex; flex-direction: column; gap: 2px; min-height: 48px; justify-content: center; padding: 8px 12px; border-radius: 10px; color: var(--texto); text-decoration: none; }
+.ajustes-dieta__lista a:hover { background: var(--superficie-2); }
+.ajustes-dieta__lista span { font-size: 13px; color: var(--texto-suave); }
+@media (max-width: 760px) {
+  .dieta__principal > .refeicao { order: 1; }
+  .dieta__principal > .macros { order: 2; }
+  .dieta__principal > .peso-compacto { order: 3; }
+  .dieta__principal > :not(.refeicao):not(.macros):not(.peso-compacto) { order: 4; }
+  .ajustes-dieta { align-self: flex-start; }
+  .ajustes-dieta__lista { left: 0; right: auto; }
+}
