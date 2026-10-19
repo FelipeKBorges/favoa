@@ -95,6 +95,7 @@ public static class InfraestruturaExtensions
             db.Alimentos.AddRange(LerIbge());
 
         await db.SaveChangesAsync();
+        await CarregarMedidasAsync(db);
         await PrepararPessoasAsync(db);
     }
 
@@ -180,6 +181,44 @@ public static class InfraestruturaExtensions
             Fonte = Favoa.Core.Fitness.FontesAlimento.Ibge,
             CodigoExterno = t.Codigo,
         }).ToList();
+    }
+
+    /// <summary>
+    /// Medidas caseiras (unidade, fatia, colher...) dos alimentos do IBGE, da Tabela de Medidas Referidas da POF 2008-2009.
+    /// Entra uma vez, também em bancos antigos; o que a pessoa cadastrar depois não é tocado.
+    /// </summary>
+    public static async Task CarregarMedidasAsync(FavoaDbContext db)
+    {
+        if (await db.Porcoes.AnyAsync(p => p.Origem == Favoa.Core.Fitness.OrigemPorcao.Ibge)) return;
+
+        using var stream = typeof(InfraestruturaExtensions).Assembly.GetManifestResourceStream("Favoa.Data.medidas.json")
+                           ?? throw new InvalidOperationException("medidas.json não embutido");
+        var medidas = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, List<System.Text.Json.JsonElement>>>(stream) ?? [];
+
+        // Alimentos da TACO que têm par no IBGE (ovo, pão francês, banana...) usam as medidas do par.
+        using var streamTaco = typeof(InfraestruturaExtensions).Assembly.GetManifestResourceStream("Favoa.Data.medidas_taco.json")
+                               ?? throw new InvalidOperationException("medidas_taco.json não embutido");
+        var paresTaco = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(streamTaco) ?? [];
+
+        var alimentos = await db.Alimentos.IgnoreQueryFilters().AsNoTracking()
+            .Where(a => a.CodigoTaco != null || (a.Fonte == Favoa.Core.Fitness.FontesAlimento.Ibge && a.CodigoExterno != null))
+            .Select(a => new { a.Id, a.CodigoTaco, a.CodigoExterno }).ToListAsync();
+
+        foreach (var a in alimentos)
+        {
+            var codigo = a.CodigoTaco is { } taco ? paresTaco.GetValueOrDefault(taco.ToString()) : a.CodigoExterno;
+            if (codigo is null || !medidas.TryGetValue(codigo, out var lista)) continue;
+            var porcoes = lista.Select(x => (Nome: x[0].GetString()!, Gramas: x[1].GetDouble())).Where(x => x.Gramas > 0).ToList();
+            // Ao abrir o alimento já vem "1 unidade" (ou "1 fatia"), se houver; senão fica em gramas.
+            var padrao = porcoes.FirstOrDefault(x => x.Nome == "Unidade");
+            if (padrao.Nome is null) padrao = porcoes.FirstOrDefault(x => x.Nome == "Fatia");
+            foreach (var p in porcoes)
+                db.Porcoes.Add(new Favoa.Core.Fitness.PorcaoAlimento
+                {
+                    AlimentoId = a.Id, Nome = p.Nome, Gramas = p.Gramas, Padrao = p.Nome == padrao.Nome, Origem = Favoa.Core.Fitness.OrigemPorcao.Ibge,
+                });
+        }
+        await db.SaveChangesAsync();
     }
 
     private sealed record ItemIbge(string Codigo, string Nome, double Kcal, double Proteina, double Carboidrato, double Gordura, double Fibra);

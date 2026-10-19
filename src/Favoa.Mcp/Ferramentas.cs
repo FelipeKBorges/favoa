@@ -171,7 +171,7 @@ public sealed class Ferramentas(IFavoaServico favoa, IFitnessServico fitness, ID
         var sb = new StringBuilder("id | alimento | kcal | P | C | G (por 100 g)\n");
         foreach (var x in itens)
             sb.AppendLine($"{Curto(x.Id)} | {x.Nome}{(x.Personalizado ? " ★" : "")} | {x.Kcal:0} | {N1(x.Proteina)} | {N1(x.Carboidrato)} | {N1(x.Gordura)}" +
-                          (x.GramasPorcao is { } g ? $" | 1 {x.NomePorcao} = {g} g" : ""));
+                          (x.Porcoes.Count > 0 ? " | " + string.Join("; ", x.Porcoes.Take(4).Select(p => $"1 {p.Nome.ToLowerInvariant()} = {p.Gramas:0.#} g")) : ""));
         return sb.ToString().TrimEnd();
     }
 

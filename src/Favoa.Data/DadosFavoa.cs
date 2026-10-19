@@ -175,10 +175,13 @@ public sealed class DadosFavoa(IDbContextFactory<FavoaDbContext> fabrica, Opcoes
                 .ToList(),
             Alimentos = await db.Alimentos.AsNoTracking().OrderBy(x => x.CodigoTaco == null).ThenBy(x => x.CodigoTaco).ThenBy(x => x.Nome)
                 .Select(x => new AlimentoJson(x.Id, x.Nome, x.Grupo, x.Kcal, x.Proteina, x.Carboidrato, x.Gordura, x.Fibra, x.CodigoTaco, x.Personalizado, x.NomePorcao, x.GramasPorcao, x.CriadoEm, x.Fonte, x.CodigoExterno)).ToListAsync(ct),
+            // Só as medidas da casa; as do catálogo do IBGE voltam sozinhas na subida do app.
+            Porcoes = await db.Porcoes.AsNoTracking().Where(x => x.Origem == OrigemPorcao.Meu).OrderBy(x => x.AlimentoId).ThenBy(x => x.Nome)
+                .Select(x => new PorcaoJson(x.Id, x.AlimentoId, x.Nome, x.Gramas, x.Padrao)).ToListAsync(ct),
             Plano = await db.ItensPlano.AsNoTracking().OrderBy(x => x.Refeicao).ThenBy(x => x.Ordem)
-                .Select(x => new ItemPlanoJson(x.Id, x.Refeicao, x.AlimentoId, x.Gramas, x.Ordem) { PessoaId = x.PessoaId }).ToListAsync(ct),
+                .Select(x => new ItemPlanoJson(x.Id, x.Refeicao, x.AlimentoId, x.Gramas, x.Ordem) { PessoaId = x.PessoaId, Unidade = x.Unidade, Quantidade = x.Quantidade }).ToListAsync(ct),
             Consumos = await db.Consumos.AsNoTracking().OrderBy(x => x.Data).ThenBy(x => x.CriadoEm)
-                .Select(x => new ConsumoJson(x.Id, x.Data, x.Refeicao, x.AlimentoId, x.Gramas, x.DoPlano, x.CriadoEm) { PessoaId = x.PessoaId }).ToListAsync(ct),
+                .Select(x => new ConsumoJson(x.Id, x.Data, x.Refeicao, x.AlimentoId, x.Gramas, x.DoPlano, x.CriadoEm) { PessoaId = x.PessoaId, Unidade = x.Unidade, Quantidade = x.Quantidade }).ToListAsync(ct),
             Pesos = await db.Pesos.AsNoTracking().OrderBy(x => x.Data)
                 .Select(x => new PesoJson(x.Id, x.Data, x.Kg, x.CriadoEm) { PessoaId = x.PessoaId }).ToListAsync(ct),
             Medidas = await db.Medidas.AsNoTracking().OrderBy(x => x.Data)
@@ -332,6 +335,7 @@ public sealed class DadosFavoa(IDbContextFactory<FavoaDbContext> fabrica, Opcoes
                 await db.Pesos.ExecuteDeleteAsync(ct);
                 await db.Medidas.ExecuteDeleteAsync(ct);
                 await db.Exercicios.ExecuteDeleteAsync(ct);
+                await db.Porcoes.ExecuteDeleteAsync(ct);
                 await db.Alimentos.ExecuteDeleteAsync(ct);
             }
 
@@ -431,6 +435,9 @@ public sealed class DadosFavoa(IDbContextFactory<FavoaDbContext> fabrica, Opcoes
                     // TACO e IBGE são catálogo comum (sem família); o resto é da casa.
                     FamiliaId = x.CodigoTaco is not null || x.Fonte == FontesAlimento.Ibge ? null : familiaId,
                 }));
+                var idsAlimentos = pacote.Alimentos.Select(a => a.Id).ToHashSet();
+                db.Porcoes.AddRange((pacote.Porcoes ?? []).Where(x => idsAlimentos.Contains(x.AlimentoId) && x.Gramas > 0 && !string.IsNullOrWhiteSpace(x.Nome))
+                    .Select(x => new PorcaoAlimento { Id = x.Id, AlimentoId = x.AlimentoId, Nome = x.Nome.Trim(), Gramas = x.Gramas, Padrao = x.Padrao, Origem = OrigemPorcao.Meu, FamiliaId = familiaId }));
                 db.Exercicios.AddRange((pacote.Exercicios ?? []).Select(x => new Exercicio { Id = x.Id, Nome = x.Nome, Grupo = x.Grupo ?? "", Tipo = x.Tipo, Ativo = x.Ativo, CriadoEm = x.CriadoEm, FamiliaId = familiaId }));
                 db.Fichas.AddRange((pacote.Fichas ?? []).Select(f => new FichaTreino
                 {
@@ -447,13 +454,15 @@ public sealed class DadosFavoa(IDbContextFactory<FavoaDbContext> fabrica, Opcoes
                         CargaKg = e.CargaKg, Minutos = e.Minutos, DistanciaKm = e.DistanciaKm, CriadoEm = e.CriadoEm, Intensidade = (Intensidade?)e.Intensidade,
                     }).ToList(),
                 }));
-                db.ItensPlano.AddRange((pacote.Plano ?? []).Select(x => new ItemPlano { Id = x.Id, Refeicao = x.Refeicao, AlimentoId = x.AlimentoId, Gramas = x.Gramas, Ordem = x.Ordem, PessoaId = Dono(x.PessoaId) }));
-                db.Consumos.AddRange((pacote.Consumos ?? []).Select(x => new Consumo { Id = x.Id, Data = x.Data, Refeicao = x.Refeicao, AlimentoId = x.AlimentoId, Gramas = x.Gramas, DoPlano = x.DoPlano, CriadoEm = x.CriadoEm, PessoaId = Dono(x.PessoaId) }));
+                db.ItensPlano.AddRange((pacote.Plano ?? []).Select(x => new ItemPlano { Id = x.Id, Refeicao = x.Refeicao, AlimentoId = x.AlimentoId, Gramas = x.Gramas, Unidade = x.Unidade, Quantidade = x.Quantidade, Ordem = x.Ordem, PessoaId = Dono(x.PessoaId) }));
+                db.Consumos.AddRange((pacote.Consumos ?? []).Select(x => new Consumo { Id = x.Id, Data = x.Data, Refeicao = x.Refeicao, AlimentoId = x.AlimentoId, Gramas = x.Gramas, Unidade = x.Unidade, Quantidade = x.Quantidade, DoPlano = x.DoPlano, CriadoEm = x.CriadoEm, PessoaId = Dono(x.PessoaId) }));
                 db.Medidas.AddRange((pacote.Medidas ?? []).Select(x => new MedidaCorporal { Id = x.Id, Data = x.Data, Tipo = x.Tipo, Cm = x.Cm, CriadoEm = x.CriadoEm, PessoaId = Dono(x.PessoaId) }));
                 db.Pesos.AddRange((pacote.Pesos ?? []).Select(x => new RegistroPeso { Id = x.Id, Data = x.Data, Kg = x.Kg, CriadoEm = x.CriadoEm, PessoaId = Dono(x.PessoaId) }));
             }
 
             await db.SaveChangesAsync(ct);
+            // O catálogo de medidas do IBGE vai junto com os alimentos apagados; volta para os alimentos importados.
+            if (temFitness) await InfraestruturaExtensions.CarregarMedidasAsync(db);
             await transacao.CommitAsync(ct);
         }
         catch (Exception ex) when (ex is DbUpdateException or InvalidOperationException)
@@ -565,6 +574,7 @@ public sealed class DadosFavoa(IDbContextFactory<FavoaDbContext> fabrica, Opcoes
         public List<FichaJson>? Fichas { get; init; }
         public List<SessaoJson>? Sessoes { get; init; }
         public List<AlimentoJson>? Alimentos { get; init; }
+        public List<PorcaoJson>? Porcoes { get; init; }
         public List<ItemPlanoJson>? Plano { get; init; }
         public List<ConsumoJson>? Consumos { get; init; }
         public List<PesoJson>? Pesos { get; init; }
@@ -609,8 +619,10 @@ public sealed class DadosFavoa(IDbContextFactory<FavoaDbContext> fabrica, Opcoes
     private sealed record ExercicioRealizadoJson(Guid Id, Guid ExercicioId, int Ordem, int? Series, int? Repeticoes, decimal? CargaKg, int? Minutos, decimal? DistanciaKm, DateTime CriadoEm) { public int? Intensidade { get; init; } }
     private sealed record AlimentoJson(Guid Id, string Nome, string? Grupo, double Kcal, double Proteina, double Carboidrato, double Gordura, double Fibra, int? CodigoTaco, bool Personalizado, string? NomePorcao, int? GramasPorcao, DateTime CriadoEm,
         string? Fonte = null, string? CodigoExterno = null);
-    private sealed record ItemPlanoJson(Guid Id, Refeicao Refeicao, Guid AlimentoId, int Gramas, int Ordem) { public Guid? PessoaId { get; init; } }
-    private sealed record ConsumoJson(Guid Id, DateOnly Data, Refeicao Refeicao, Guid AlimentoId, int Gramas, bool DoPlano, DateTime CriadoEm) { public Guid? PessoaId { get; init; } }
+    private sealed record ItemPlanoJson(Guid Id, Refeicao Refeicao, Guid AlimentoId, int Gramas, int Ordem) { public Guid? PessoaId { get; init; } public string? Unidade { get; init; } public double? Quantidade { get; init; } }
+    private sealed record ConsumoJson(Guid Id, DateOnly Data, Refeicao Refeicao, Guid AlimentoId, int Gramas, bool DoPlano, DateTime CriadoEm) { public Guid? PessoaId { get; init; } public string? Unidade { get; init; } public double? Quantidade { get; init; } }
+
+    private sealed record PorcaoJson(Guid Id, Guid AlimentoId, string Nome, double Gramas, bool Padrao);
     private sealed record MedidaJson(Guid Id, DateOnly Data, string Tipo, decimal Cm, DateTime CriadoEm) { public Guid? PessoaId { get; init; } }
     private sealed record PesoJson(Guid Id, DateOnly Data, decimal Kg, DateTime CriadoEm) { public Guid? PessoaId { get; init; } }
 }

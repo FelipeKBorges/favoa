@@ -667,13 +667,25 @@ public sealed partial class FavoaServico(IDbContextFactory<FavoaDbContext> fabri
             return new(false, $"Não achei \"{i.Titulo}\" na base de alimentos. Cadastre em Dieta → Alimentos.");
 
         var gramas = i.Gramas;
-        if (gramas is null && i.Unidades is { } u && alimento.GramasPorcao is { } porcao)
-            gramas = (int)Math.Round(u * porcao);
+        string? unidade = null;
+        double? quantidade = null;
+        if (gramas is null && i.Unidades is { } u)
+        {
+            // "comi 2 ovos": a unidade do alimento (cadastro próprio, senão a medida padrão da tabela do IBGE).
+            var tabela = await db.Porcoes.AsNoTracking().Where(p => p.AlimentoId == alimento.Id).ToListAsync(ct);
+            var porcao = FitnessServico.Porcoes(alimento, tabela).FirstOrDefault(p => p.Padrao);
+            if (porcao is not null)
+            {
+                gramas = (int)Math.Round((double)u * porcao.Gramas, MidpointRounding.AwayFromZero);
+                unidade = porcao.Nome;
+                quantidade = (double)u;
+            }
+        }
         if (gramas is null or <= 0)
             return new(false, $"Quantos gramas de {alimento.Nome}? Ex.: comi 150g de {i.Titulo}");
 
         var refeicao = i.Refeicao ?? Refeicoes.PelaHora(DateTime.Now.Hour);
-        var consumo = new Consumo { Data = i.Data, Refeicao = refeicao, AlimentoId = alimento.Id, Gramas = gramas.Value };
+        var consumo = new Consumo { Data = i.Data, Refeicao = refeicao, AlimentoId = alimento.Id, Gramas = gramas.Value, Unidade = unidade, Quantidade = quantidade };
         db.Consumos.Add(consumo);
 
         var kcal = Macros.De(alimento, gramas.Value).Kcal;

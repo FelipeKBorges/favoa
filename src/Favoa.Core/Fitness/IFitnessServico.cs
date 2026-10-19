@@ -77,7 +77,18 @@ public sealed record AlimentoResumo(
     /// <summary>TACO, IBGE, Open Food Facts ou Meu.</summary>
     public string Fonte { get; init; } = "";
     public string? Marca { get; init; }
+    /// <summary>Medidas caseiras do alimento (a do cadastro próprio vem primeiro). Vazio = só gramas.</summary>
+    public IReadOnlyList<PorcaoResumo> Porcoes { get; init; } = [];
+    /// <summary>Como a pessoa lançou da última vez ("g", "ml" ou nome da medida) e quanto; a busca já abre assim.</summary>
+    public string? UltimaUnidade { get; init; }
+    public double? UltimaQuantidade { get; init; }
 }
+
+/// <summary><paramref name="Estimada"/>: veio da tabela do IBGE (consumo médio), não de uma pesagem.</summary>
+public sealed record PorcaoResumo(string Nome, double Gramas, bool Padrao, bool Estimada = false);
+
+/// <summary>Medida na tela de edição: do catálogo (IBGE) ou da casa; <paramref name="Ajustada"/> = a casa trocou o valor do catálogo.</summary>
+public sealed record PorcaoEdicao(Guid Id, string Nome, double Gramas, bool DaCasa, bool Ajustada);
 
 /// <summary>Produto achado numa base da internet (ainda não salvo no Fávoa). Valores por 100 g.</summary>
 public sealed record ProdutoOnline(
@@ -90,7 +101,11 @@ public sealed record AlimentoRecente(AlimentoResumo Alimento, int Gramas, int Ve
 public sealed record AlimentoEdicao(
     Guid? Id, string Nome, double Kcal, double Proteina, double Carboidrato, double Gordura, string? NomePorcao, int? GramasPorcao);
 
-public sealed record ItemRefeicao(Guid Id, Guid AlimentoId, string Alimento, int Gramas, Macros Macros, bool DoPlano);
+public sealed record ItemRefeicao(Guid Id, Guid AlimentoId, string Alimento, int Gramas, Macros Macros, bool DoPlano)
+{
+    /// <summary>"1,5 fatia" quando foi lançado numa medida; nulo quando foi em g ou ml.</summary>
+    public string? Medida { get; init; }
+}
 
 public sealed record RefeicaoDia(Refeicao Refeicao, IReadOnlyList<ItemRefeicao> Plano, IReadOnlyList<ItemRefeicao> Consumido)
 {
@@ -157,6 +172,7 @@ public interface IFitnessServico
     /// <summary>Guarda um produto da internet na base local (ou devolve o que já foi guardado com o mesmo código).</summary>
     Task<AlimentoResumo> SalvarProdutoOnlineAsync(ProdutoOnline produto, CancellationToken ct = default);
     Task<ResultadoRegistro> AdicionarConsumoAsync(DateOnly dia, Refeicao refeicao, Guid alimentoId, int gramas, CancellationToken ct = default);
+    Task<ResultadoRegistro> AdicionarConsumoAsync(DateOnly dia, Refeicao refeicao, Guid alimentoId, int gramas, string? unidade, double? quantidade, CancellationToken ct = default);
     Task<ResultadoRegistro> RemoverConsumoAsync(Guid consumoId, CancellationToken ct = default);
     Task<ResultadoRegistro> SeguirPlanoAsync(DateOnly dia, Refeicao refeicao, CancellationToken ct = default);
     /// <summary>Copia o que foi comido na refeição de outro dia (ex.: ontem) para o dia escolhido.</summary>
@@ -164,6 +180,14 @@ public interface IFitnessServico
     /// <summary>Os alimentos mais lançados nos últimos 60 dias (mais frequentes primeiro), com a última quantidade usada.</summary>
     Task<IReadOnlyList<AlimentoRecente>> ObterAlimentosRecentesAsync(DateOnly hoje, int max = 8, CancellationToken ct = default);
     Task<ResultadoRegistro> AdicionarItemPlanoAsync(Refeicao refeicao, Guid alimentoId, int gramas, CancellationToken ct = default);
+    Task<ResultadoRegistro> AdicionarItemPlanoAsync(Refeicao refeicao, Guid alimentoId, int gramas, string? unidade, double? quantidade, CancellationToken ct = default);
+
+    /// <summary>Medidas do alimento para editar (as da casa valem no lugar das do catálogo de mesmo nome).</summary>
+    Task<IReadOnlyList<PorcaoEdicao>> ObterPorcoesAsync(Guid alimentoId, CancellationToken ct = default);
+    /// <summary>Cria a medida da casa ou troca os gramas dela; com o nome de uma do catálogo, ajusta só para esta casa.</summary>
+    Task<ResultadoRegistro> SalvarPorcaoAsync(Guid alimentoId, string nome, double gramas, CancellationToken ct = default);
+    /// <summary>Tira a medida da casa; se ela ajustava uma do catálogo, volta o valor do catálogo.</summary>
+    Task<ResultadoRegistro> RemoverPorcaoAsync(Guid porcaoId, CancellationToken ct = default);
     Task<ResultadoRegistro> RemoverItemPlanoAsync(Guid itemId, CancellationToken ct = default);
     Task<MetasFitness> ObterMetasAsync(CancellationToken ct = default);
     Task SalvarMetasAsync(MetasFitness metas, CancellationToken ct = default);

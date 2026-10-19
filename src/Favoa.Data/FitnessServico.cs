@@ -253,8 +253,8 @@ public sealed class FitnessServico(IDbContextFactory<FavoaDbContext> fabrica, Fa
 
         var refeicoes = Refeicoes.Todas.Select(r => new RefeicaoDia(
             r,
-            plano.Where(p => p.Refeicao == r).Select(p => new ItemRefeicao(p.Id, p.AlimentoId, p.Alimento!.Nome, p.Gramas, Macros.De(p.Alimento, p.Gramas), true)).ToList(),
-            consumos.Where(c => c.Refeicao == r).Select(c => new ItemRefeicao(c.Id, c.AlimentoId, c.Alimento!.Nome, c.Gramas, Macros.De(c.Alimento, c.Gramas), c.DoPlano)).ToList()))
+            plano.Where(p => p.Refeicao == r).Select(p => new ItemRefeicao(p.Id, p.AlimentoId, p.Alimento!.Nome, p.Gramas, Macros.De(p.Alimento, p.Gramas), true) { Medida = TextoMedida(p.Unidade, p.Quantidade) }).ToList(),
+            consumos.Where(c => c.Refeicao == r).Select(c => new ItemRefeicao(c.Id, c.AlimentoId, c.Alimento!.Nome, c.Gramas, Macros.De(c.Alimento, c.Gramas), c.DoPlano) { Medida = TextoMedida(c.Unidade, c.Quantidade) }).ToList()))
             .ToList();
 
         var agua = await db.RegistrosAgua.Where(a => a.Data == dia).SumAsync(a => (int?)a.Mililitros, ct) ?? 0;
@@ -272,7 +272,7 @@ public sealed class FitnessServico(IDbContextFactory<FavoaDbContext> fabrica, Fa
     public async Task<IReadOnlyList<AlimentoResumo>> BuscarAlimentosAsync(string texto, int limite = 12, CancellationToken ct = default)
     {
         await using var db = await fabrica.AbrirAsync(pessoa, ct);
-        return (await Buscar(db, texto, limite, ct)).Select(Resumir).ToList();
+        return await ResumirComPorcoesAsync(db, await Buscar(db, texto, limite, ct), ct);
     }
 
     /// <summary>
@@ -359,17 +359,49 @@ public sealed class FitnessServico(IDbContextFactory<FavoaDbContext> fabrica, Fa
         return new(true, $"Alimento salvo: {nome}");
     }
 
-    public async Task<ResultadoRegistro> AdicionarConsumoAsync(DateOnly dia, Refeicao refeicao, Guid alimentoId, int gramas, CancellationToken ct = default)
+    /// <summary>"1,5 fatia" para o que foi lançado numa medida; nada para g e ml (a tela já mostra os gramas).</summary>
+    internal static string? TextoMedida(string? unidade, double? quantidade) =>
+        unidade is null or "g" or "ml" || quantidade is not > 0
+            ? null
+            : $"{quantidade.Value.ToString("0.##", PtBr)} {(quantidade > 1 ? PluralDaMedida(unidade.ToLower(PtBr)) : unidade.ToLower(PtBr))}";
+
+    /// <summary>"fatia" → "fatias", "colher de sopa" → "colheres de sopa", "unidade pequena" → "unidades pequenas", "porção" → "porções".</summary>
+    public static string PluralDaMedida(string medida)
+    {
+        var palavras = medida.Split(' ');
+        string[] ligacoes = ["de", "do", "da", "dos", "das"];
+        for (var i = 0; i < palavras.Length; i++)
+        {
+            var w = palavras[i];
+            if (i > 0 && (ligacoes.Contains(palavras[i - 1]) || w.Contains('/') || w.Length < 3)) break;
+            if (i > 0 && ligacoes.Contains(w)) break;
+            palavras[i] = w.EndsWith("ão") ? w[..^2] + "ões" : w.EndsWith('r') ? w + "es" : w.EndsWith('s') ? w : w + "s";
+            if (i == 0 && palavras.Length > 1 && ligacoes.Contains(palavras[1])) break;
+        }
+        return string.Join(' ', palavras);
+    }
+
+    private static (string? Unidade, double? Quantidade) LimparUnidade(string? unidade, double? quantidade) =>
+        string.IsNullOrWhiteSpace(unidade) || quantidade is not > 0
+            ? (null, null)
+            : (unidade.Trim().Length > 60 ? unidade.Trim()[..60] : unidade.Trim(), Math.Round(quantidade.Value, 2));
+
+    public Task<ResultadoRegistro> AdicionarConsumoAsync(DateOnly dia, Refeicao refeicao, Guid alimentoId, int gramas, CancellationToken ct = default) =>
+        AdicionarConsumoAsync(dia, refeicao, alimentoId, gramas, null, null, ct);
+
+    public async Task<ResultadoRegistro> AdicionarConsumoAsync(DateOnly dia, Refeicao refeicao, Guid alimentoId, int gramas, string? unidade, double? quantidade, CancellationToken ct = default)
     {
         if (gramas <= 0) return new(false, "Informe a quantidade em gramas.");
         await using var db = await fabrica.AbrirAsync(pessoa, ct);
         var alimento = await db.Alimentos.FindAsync([alimentoId], ct);
         if (alimento is null) return NaoEncontrado();
 
-        var consumo = new Consumo { Data = dia, Refeicao = refeicao, AlimentoId = alimentoId, Gramas = gramas };
+        var (un, qtd) = LimparUnidade(unidade, quantidade);
+        var consumo = new Consumo { Data = dia, Refeicao = refeicao, AlimentoId = alimentoId, Gramas = gramas, Unidade = un, Quantidade = qtd };
         db.Consumos.Add(consumo);
         await db.SaveChangesAsync(ct);
-        return new(true, $"{gramas} g de {alimento.Nome} · {Macros.De(alimento, gramas).Kcal:0} kcal",
+        var medida = TextoMedida(un, qtd);
+        return new(true, $"{(medida is null ? "" : medida + " = ")}{gramas} g de {alimento.Nome} · {Macros.De(alimento, gramas).Kcal:0} kcal",
             new(Core.Edicao.TipoReferencia.Consumo, consumo.Id));
     }
 
@@ -392,7 +424,7 @@ public sealed class FitnessServico(IDbContextFactory<FavoaDbContext> fabrica, Fa
         // Clicar de novo não duplica: tira o que veio do plano antes.
         var anteriores = await db.Consumos.Where(c => c.Data == dia && c.Refeicao == refeicao && c.DoPlano).ToListAsync(ct);
         db.Consumos.RemoveRange(anteriores);
-        db.Consumos.AddRange(itens.Select(i => new Consumo { Data = dia, Refeicao = refeicao, AlimentoId = i.AlimentoId, Gramas = i.Gramas, DoPlano = true }));
+        db.Consumos.AddRange(itens.Select(i => new Consumo { Data = dia, Refeicao = refeicao, AlimentoId = i.AlimentoId, Gramas = i.Gramas, Unidade = i.Unidade, Quantidade = i.Quantidade, DoPlano = true }));
         await db.SaveChangesAsync(ct);
         return new(true, $"{Refeicoes.Nome(refeicao)} conforme o plano.");
     }
@@ -403,7 +435,7 @@ public sealed class FitnessServico(IDbContextFactory<FavoaDbContext> fabrica, Fa
         await using var db = await fabrica.AbrirAsync(pessoa, ct);
         var itens = await db.Consumos.Where(c => c.Data == origem && c.Refeicao == refeicao).OrderBy(c => c.CriadoEm).ToListAsync(ct);
         if (itens.Count == 0) return new(false, $"Não há {Refeicoes.Nome(refeicao).ToLower(PtBr)} em {origem:dd/MM} para copiar.");
-        db.Consumos.AddRange(itens.Select(c => new Consumo { Data = destino, Refeicao = refeicao, AlimentoId = c.AlimentoId, Gramas = c.Gramas, DoPlano = c.DoPlano }));
+        db.Consumos.AddRange(itens.Select(c => new Consumo { Data = destino, Refeicao = refeicao, AlimentoId = c.AlimentoId, Gramas = c.Gramas, Unidade = c.Unidade, Quantidade = c.Quantidade, DoPlano = c.DoPlano }));
         await db.SaveChangesAsync(ct);
         return new(true, $"{Refeicoes.Nome(refeicao)} copiado de {origem:dd/MM}: {Plural(itens.Count, "item", "itens")}.");
     }
@@ -413,16 +445,20 @@ public sealed class FitnessServico(IDbContextFactory<FavoaDbContext> fabrica, Fa
         await using var db = await fabrica.AbrirAsync(pessoa, ct);
         var desde = hoje.AddDays(-60);
         var consumos = await db.Consumos.AsNoTracking().Where(c => c.Data >= desde).Include(c => c.Alimento).ToListAsync(ct);
-        return consumos.Where(c => c.Alimento is not null)
+        var top = consumos.Where(c => c.Alimento is not null)
             .GroupBy(c => c.AlimentoId)
             .Select(g => (Ultimo: g.OrderByDescending(c => c.Data).ThenByDescending(c => c.CriadoEm).First(), Vezes: g.Count()))
             .OrderByDescending(x => x.Vezes).ThenByDescending(x => x.Ultimo.Data)
             .Take(max)
-            .Select(x => new AlimentoRecente(Resumir(x.Ultimo.Alimento!), x.Ultimo.Gramas, x.Vezes))
             .ToList();
+        var resumos = (await ResumirComPorcoesAsync(db, top.Select(x => x.Ultimo.Alimento!).ToList(), ct)).ToDictionary(r => r.Id);
+        return top.Select(x => new AlimentoRecente(resumos[x.Ultimo.AlimentoId], x.Ultimo.Gramas, x.Vezes)).ToList();
     }
 
-    public async Task<ResultadoRegistro> AdicionarItemPlanoAsync(Refeicao refeicao, Guid alimentoId, int gramas, CancellationToken ct = default)
+    public Task<ResultadoRegistro> AdicionarItemPlanoAsync(Refeicao refeicao, Guid alimentoId, int gramas, CancellationToken ct = default) =>
+        AdicionarItemPlanoAsync(refeicao, alimentoId, gramas, null, null, ct);
+
+    public async Task<ResultadoRegistro> AdicionarItemPlanoAsync(Refeicao refeicao, Guid alimentoId, int gramas, string? unidade, double? quantidade, CancellationToken ct = default)
     {
         if (gramas <= 0) return new(false, "Informe a quantidade em gramas.");
         await using var db = await fabrica.AbrirAsync(pessoa, ct);
@@ -430,7 +466,8 @@ public sealed class FitnessServico(IDbContextFactory<FavoaDbContext> fabrica, Fa
         if (alimento is null) return NaoEncontrado();
 
         var ordem = await db.ItensPlano.CountAsync(i => i.Refeicao == refeicao, ct);
-        db.ItensPlano.Add(new ItemPlano { Refeicao = refeicao, AlimentoId = alimentoId, Gramas = gramas, Ordem = ordem });
+        var (un, qtd) = LimparUnidade(unidade, quantidade);
+        db.ItensPlano.Add(new ItemPlano { Refeicao = refeicao, AlimentoId = alimentoId, Gramas = gramas, Unidade = un, Quantidade = qtd, Ordem = ordem });
         await db.SaveChangesAsync(ct);
         return new(true, $"{alimento.Nome} no plano do {Refeicoes.Nome(refeicao).ToLower(PtBr)}.");
     }
@@ -670,12 +707,104 @@ public sealed class FitnessServico(IDbContextFactory<FavoaDbContext> fabrica, Fa
             .ToDictionary(x => x.Key, x => x.Kcal);
     }
 
-    private static AlimentoResumo Resumir(Alimento a) =>
+    private static AlimentoResumo Resumir(Alimento a, IReadOnlyList<PorcaoAlimento>? tabela = null) =>
         new(a.Id, a.Nome, a.Grupo, a.Kcal, a.Proteina, a.Carboidrato, a.Gordura, a.Personalizado, a.NomePorcao, a.GramasPorcao)
         {
             Fonte = FontesAlimento.Rotulo(a),
             Marca = a.Fonte == FontesAlimento.OpenFoodFacts && a.Grupo != "Produtos" ? a.Grupo : null,
+            Porcoes = Porcoes(a, tabela ?? []),
         };
+
+    /// <summary>
+    /// Medidas que a busca oferece: a porção do cadastro próprio (ou do rótulo, no Open Food Facts) primeiro e já escolhida,
+    /// depois as da tabela do IBGE, da mais usada para a menos (unidade, fatia, colheres...).
+    /// </summary>
+    internal static List<PorcaoResumo> Porcoes(Alimento a, IReadOnlyList<PorcaoAlimento> tabela)
+    {
+        var lista = new List<PorcaoResumo>();
+        if (a.GramasPorcao is > 0)
+            lista.Add(new(string.IsNullOrWhiteSpace(a.NomePorcao) ? "porção" : a.NomePorcao, a.GramasPorcao.Value, true));
+        var temPadrao = lista.Count > 0;
+        // A medida da casa vale no lugar da do catálogo com o mesmo nome.
+        var validas = tabela.GroupBy(p => p.Nome, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.OrderByDescending(p => p.Origem == OrigemPorcao.Meu).First())
+            .OrderBy(p => OrdemMedida(p.Nome)).ThenBy(p => p.Gramas);
+        foreach (var p in validas)
+        {
+            if (lista.Any(x => string.Equals(x.Nome, p.Nome, StringComparison.OrdinalIgnoreCase))) continue;
+            lista.Add(new(p.Nome, p.Gramas, p.Padrao && !temPadrao, Estimada: p.Origem == OrigemPorcao.Ibge));
+        }
+        return lista;
+    }
+
+    private static readonly string[] OrdemDasMedidas =
+        ["Unidade", "Unidade pequena", "Fatia", "Pedaço", "Metade", "Colher de sopa", "Colher de sobremesa", "Colher de chá", "Colher de arroz/servir",
+         "Concha", "Copo americano", "Xícara de chá", "Porção"];
+
+    private static int OrdemMedida(string nome) { var i = Array.IndexOf(OrdemDasMedidas, nome); return i < 0 ? OrdemDasMedidas.Length : i; }
+
+    private static async Task<List<AlimentoResumo>> ResumirComPorcoesAsync(FavoaDbContext db, IReadOnlyList<Alimento> alimentos, CancellationToken ct)
+    {
+        var ids = alimentos.Select(a => a.Id).ToList();
+        var porcoes = (await db.Porcoes.AsNoTracking().Where(p => ids.Contains(p.AlimentoId)).ToListAsync(ct))
+            .ToLookup(p => p.AlimentoId);
+        // Como a pessoa lançou cada um da última vez: a busca já abre na mesma unidade e quantidade.
+        var ultimos = (await db.Consumos.AsNoTracking().Where(c => ids.Contains(c.AlimentoId) && c.Unidade != null).ToListAsync(ct))
+            .GroupBy(c => c.AlimentoId)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(c => c.Data).ThenByDescending(c => c.CriadoEm).First());
+        return alimentos.Select(a => Resumir(a, porcoes[a.Id].ToList()) with { }).Select(r => ultimos.TryGetValue(r.Id, out var u)
+            ? r with { UltimaUnidade = u.Unidade, UltimaQuantidade = u.Quantidade } : r).ToList();
+    }
+
+    public async Task<IReadOnlyList<PorcaoEdicao>> ObterPorcoesAsync(Guid alimentoId, CancellationToken ct = default)
+    {
+        await using var db = await fabrica.AbrirAsync(pessoa, ct);
+        var todas = await db.Porcoes.AsNoTracking().Where(p => p.AlimentoId == alimentoId).ToListAsync(ct);
+        return todas.GroupBy(p => p.Nome, StringComparer.OrdinalIgnoreCase)
+            .Select(g => (Valida: g.OrderByDescending(p => p.Origem == OrigemPorcao.Meu).First(), Ajusta: g.Count() > 1))
+            .OrderBy(x => OrdemMedida(x.Valida.Nome)).ThenBy(x => x.Valida.Gramas)
+            .Select(x => new PorcaoEdicao(x.Valida.Id, x.Valida.Nome, x.Valida.Gramas, x.Valida.Origem == OrigemPorcao.Meu, x.Ajusta))
+            .ToList();
+    }
+
+    public async Task<ResultadoRegistro> SalvarPorcaoAsync(Guid alimentoId, string nome, double gramas, CancellationToken ct = default)
+    {
+        nome = (nome ?? "").Trim();
+        if (nome.Length == 0) return new(false, "Dê um nome para a medida (fatia, colher, pote...).");
+        if (nome.Length > 60) nome = nome[..60];
+        if (!double.IsFinite(gramas) || gramas <= 0 || gramas > 5000) return new(false, "Os gramas da medida precisam estar entre 0 e 5.000.");
+        gramas = Math.Round(gramas, 1);
+
+        await using var db = await fabrica.AbrirAsync(pessoa, ct);
+        var alimento = await db.Alimentos.FindAsync([alimentoId], ct);
+        if (alimento is null) return NaoEncontrado();
+
+        var existentes = await db.Porcoes.Where(p => p.AlimentoId == alimentoId).ToListAsync(ct);
+        var daCasa = existentes.FirstOrDefault(p => p.Origem == OrigemPorcao.Meu && string.Equals(p.Nome, nome, StringComparison.OrdinalIgnoreCase));
+        if (daCasa is not null) daCasa.Gramas = gramas;
+        else
+        {
+            var catalogo = existentes.FirstOrDefault(p => string.Equals(p.Nome, nome, StringComparison.OrdinalIgnoreCase));
+            db.Porcoes.Add(new PorcaoAlimento
+            {
+                AlimentoId = alimentoId, Nome = catalogo?.Nome ?? nome, Gramas = gramas, Origem = OrigemPorcao.Meu,
+                Padrao = catalogo?.Padrao ?? false,
+            });
+        }
+        await db.SaveChangesAsync(ct);
+        return new(true, $"1 {nome.ToLower(PtBr)} de {alimento.Nome} = {gramas.ToString("0.#", PtBr)} g.");
+    }
+
+    public async Task<ResultadoRegistro> RemoverPorcaoAsync(Guid porcaoId, CancellationToken ct = default)
+    {
+        await using var db = await fabrica.AbrirAsync(pessoa, ct);
+        var p = await db.Porcoes.FindAsync([porcaoId], ct);
+        if (p is null) return NaoEncontrado();
+        if (p.Origem != OrigemPorcao.Meu) return new(false, "Essa medida é do catálogo do IBGE. Ajuste o valor para a sua casa em vez de apagar.");
+        db.Porcoes.Remove(p);
+        await db.SaveChangesAsync(ct);
+        return new(true, "Medida removida.");
+    }
 
     /// <summary>"3×10 · 40 kg" ou "5 km · 30 min".</summary>
     internal static string Descrever(ExercicioRealizado e)

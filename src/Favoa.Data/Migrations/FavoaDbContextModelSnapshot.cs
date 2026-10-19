@@ -381,6 +381,44 @@ namespace Favoa.Data.Migrations
                     b.ToTable("fit_alimento", (string)null);
                 });
 
+            modelBuilder.Entity("Favoa.Core.Fitness.PorcaoAlimento", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("AlimentoId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("FamiliaId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("Gramas")
+                        .HasColumnType("REAL");
+
+                    b.Property<string>("Nome")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Origem")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("Padrao")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FamiliaId");
+
+                    b.HasIndex("AlimentoId", "FamiliaId", "Nome")
+                        .IsUnique();
+
+                    b.ToTable("fit_alimento_porcao", (string)null);
+                });
+
             modelBuilder.Entity("Favoa.Core.Fitness.Consumo", b =>
                 {
                     b.Property<Guid>("Id")
@@ -405,8 +443,15 @@ namespace Favoa.Data.Migrations
                     b.Property<Guid?>("PessoaId")
                         .HasColumnType("TEXT");
 
+                    b.Property<double?>("Quantidade")
+                        .HasColumnType("REAL");
+
                     b.Property<int>("Refeicao")
                         .HasColumnType("INTEGER");
+
+                    b.Property<string>("Unidade")
+                        .HasMaxLength(60)
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -586,8 +631,15 @@ namespace Favoa.Data.Migrations
                     b.Property<Guid?>("PessoaId")
                         .HasColumnType("TEXT");
 
+                    b.Property<double?>("Quantidade")
+                        .HasColumnType("REAL");
+
                     b.Property<int>("Refeicao")
                         .HasColumnType("INTEGER");
+
+                    b.Property<string>("Unidade")
+                        .HasMaxLength(60)
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -1115,6 +1167,15 @@ namespace Favoa.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Alimento");
+                });
+
+            modelBuilder.Entity("Favoa.Core.Fitness.PorcaoAlimento", b =>
+                {
+                    b.HasOne("Favoa.Core.Fitness.Alimento", null)
+                        .WithMany()
+                        .HasForeignKey("AlimentoId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Favoa.Core.Fitness.ExercicioRealizado", b =>

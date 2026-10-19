@@ -125,6 +125,29 @@ public sealed class Alimento : Favoa.Core.Pessoas.IDaFamilia
     public DateTime CriadoEm { get; set; } = DateTime.UtcNow;
 }
 
+/// <summary>
+/// Medida caseira de um alimento: "1 unidade = 45 g", "1 fatia = 25 g". Vem da tabela de medidas referidas do IBGE (POF 2008-2009,
+/// estimativa de consumo médio) ou é cadastrada pela pessoa. <see cref="Gramas"/> vale para a porção como o alimento é lançado.
+/// </summary>
+public sealed class PorcaoAlimento : Favoa.Core.Pessoas.IDaFamilia
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    /// <summary>Casa dona da medida. Nulo = catálogo do IBGE; medida com o mesmo nome da casa vale no lugar da do catálogo.</summary>
+    public Guid? FamiliaId { get; set; }
+    public Guid AlimentoId { get; set; }
+    public string Nome { get; set; } = "";
+    public double Gramas { get; set; }
+    /// <summary>Unidade que a busca já deixa escolhida ao abrir o alimento (ovo → unidade, pão de forma → fatia).</summary>
+    public bool Padrao { get; set; }
+    public string Origem { get; set; } = OrigemPorcao.Ibge;
+}
+
+public static class OrigemPorcao
+{
+    public const string Ibge = "IBGE";
+    public const string Meu = "Meu";
+}
+
 public static class FontesAlimento
 {
     public const string Ibge = "IBGE";
@@ -180,6 +203,10 @@ public sealed class ItemPlano : Favoa.Core.Pessoas.IComDono
     public Refeicao Refeicao { get; set; }
     public Guid AlimentoId { get; set; }
     public int Gramas { get; set; }
+    /// <summary>Como foi lançado: "g", "ml" ou o nome da medida ("Unidade"). Nulo = só gramas.</summary>
+    public string? Unidade { get; set; }
+    /// <summary>Quantas dessa unidade (1,5 fatia). Os gramas acima são o que conta nas contas.</summary>
+    public double? Quantidade { get; set; }
     public int Ordem { get; set; }
     public Alimento? Alimento { get; set; }
 }
@@ -194,6 +221,10 @@ public sealed class Consumo : Favoa.Core.Pessoas.IComDono
     public Refeicao Refeicao { get; set; }
     public Guid AlimentoId { get; set; }
     public int Gramas { get; set; }
+    /// <summary>Como foi lançado: "g", "ml" ou o nome da medida ("Unidade"). Nulo = só gramas.</summary>
+    public string? Unidade { get; set; }
+    /// <summary>Quantas dessa unidade (1,5 fatia). Os gramas acima são o que conta nas contas.</summary>
+    public double? Quantidade { get; set; }
     /// <summary>Veio do botão "segui o plano".</summary>
     public bool DoPlano { get; set; }
     public DateTime CriadoEm { get; set; } = DateTime.UtcNow;

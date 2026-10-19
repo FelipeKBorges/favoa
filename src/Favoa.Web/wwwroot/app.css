@@ -1170,6 +1170,12 @@ a.segmento__opcao { display: inline-flex; align-items: center; text-decoration: 
 .tabela th { text-align: left; font-size: 12px; color: var(--texto-suave); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--borda-forte); }
 .tabela td { padding: 8px; border-bottom: 1px solid var(--borda); }
 .tabela td:not(:first-child), .tabela th:not(:first-child) { text-align: right; white-space: nowrap; }
+.tabela td.tabela__celula-medidas, .tabela .tabela__detalhe td { text-align: left; white-space: normal; }
+.medidas { list-style: none; margin: 0 0 var(--espaco-3, 12px); padding: 0; display: flex; flex-direction: column; }
+.medidas li { display: flex; align-items: center; gap: 12px; min-height: 40px; border-bottom: 1px solid var(--borda); }
+.medidas li:last-child { border-bottom: 0; }
+.medidas li > :first-child { flex: 1; }
+.busca-alimento__aviso { flex-basis: 100%; }
 
 /* ---------- Acesso (PIN) ---------- */
 .entrada { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; }

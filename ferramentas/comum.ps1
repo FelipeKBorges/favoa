@@ -94,7 +94,11 @@ function Publicar-Favoa([string]$raiz, [string]$destino) {
     $versao = Versao-Do-Codigo $raiz
     $projeto = [IO.Path]::Combine($raiz, 'src', 'Favoa.Web', 'Favoa.Web.csproj')
     # Out-Host: a saída do dotnet não pode virar o valor de retorno da função.
-    dotnet publish $projeto -c Release -o $destino --nologo -v quiet "-p:SourceRevisionId=$versao" | Out-Host
+    # force-evaluate: um assets.json velho não pode deixar o Web numa versão de pacote e o Data noutra.
+    dotnet restore $projeto --force-evaluate --nologo -v quiet | Out-Host
+    if ($LASTEXITCODE -ne 0) { throw "Falha ao restaurar os pacotes." }
+    # MSB3277 vira erro: conflito de assembly aborta aqui, antes de parar o Fávoa que está no ar.
+    dotnet publish $projeto -c Release -o $destino --no-restore --nologo -v quiet -warnaserror:MSB3277 "-p:SourceRevisionId=$versao" | Out-Host
     if ($LASTEXITCODE -ne 0) { throw "Falha ao compilar. Confira se 'dotnet build' funciona na pasta do projeto." }
     return $versao
 }

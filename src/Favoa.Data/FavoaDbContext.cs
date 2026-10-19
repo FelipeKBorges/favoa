@@ -49,6 +49,7 @@ public sealed class FavoaDbContext(DbContextOptions<FavoaDbContext> options) : D
     public DbSet<SessaoTreino> Sessoes => Set<SessaoTreino>();
     public DbSet<ExercicioRealizado> ExerciciosRealizados => Set<ExercicioRealizado>();
     public DbSet<Alimento> Alimentos => Set<Alimento>();
+    public DbSet<PorcaoAlimento> Porcoes => Set<PorcaoAlimento>();
     public DbSet<ItemPlano> ItensPlano => Set<ItemPlano>();
     public DbSet<Consumo> Consumos => Set<Consumo>();
     public DbSet<RegistroPeso> Pesos => Set<RegistroPeso>();
@@ -204,9 +205,20 @@ public sealed class FavoaDbContext(DbContextOptions<FavoaDbContext> options) : D
             e.HasIndex(x => new { x.FamiliaId, x.Fonte, x.CodigoExterno }).IsUnique();
         });
 
+        b.Entity<PorcaoAlimento>(e =>
+        {
+            e.ToTable("fit_alimento_porcao");
+            e.Property(x => x.Nome).HasMaxLength(60).IsRequired();
+            e.Property(x => x.Origem).HasMaxLength(10).IsRequired();
+            e.HasIndex(x => new { x.AlimentoId, x.FamiliaId, x.Nome }).IsUnique();
+            e.HasIndex(x => x.FamiliaId);
+            e.HasOne<Alimento>().WithMany().HasForeignKey(x => x.AlimentoId).OnDelete(DeleteBehavior.Cascade);
+        });
+
         b.Entity<ItemPlano>(e =>
         {
             e.ToTable("fit_plano_item");
+            e.Property(x => x.Unidade).HasMaxLength(60);
             e.HasIndex(x => x.Refeicao);
             e.HasOne(x => x.Alimento).WithMany().HasForeignKey(x => x.AlimentoId).OnDelete(DeleteBehavior.Restrict);
         });
@@ -214,6 +226,7 @@ public sealed class FavoaDbContext(DbContextOptions<FavoaDbContext> options) : D
         b.Entity<Consumo>(e =>
         {
             e.ToTable("fit_consumo");
+            e.Property(x => x.Unidade).HasMaxLength(60);
             e.HasIndex(x => x.Data);
             e.HasOne(x => x.Alimento).WithMany().HasForeignKey(x => x.AlimentoId).OnDelete(DeleteBehavior.Restrict);
         });
@@ -274,6 +287,8 @@ public sealed class FavoaDbContext(DbContextOptions<FavoaDbContext> options) : D
         b.Entity<Exercicio>().HasQueryFilter(x => FamiliaAtual == null || x.FamiliaId == FamiliaAtual);
         // Alimentos: a TACO e a tabela do IBGE (sem família) valem para todos; os cadastrados à mão ou pela internet são da casa.
         b.Entity<Alimento>().HasQueryFilter(x => FamiliaAtual == null || x.FamiliaId == null || x.FamiliaId == FamiliaAtual);
+        // Medidas: as do catálogo (sem família) valem para todos; as ajustadas ou criadas pela casa, só para ela.
+        b.Entity<PorcaoAlimento>().HasQueryFilter(x => FamiliaAtual == null || x.FamiliaId == null || x.FamiliaId == FamiliaAtual);
 
         // Sem chave estrangeira para cfg_pessoa de propósito: no SQLite, criar FK em tabela existente
         // obriga a recriar a tabela. A pessoa é preenchida pelo contexto (SaveChanges) e filtrada aqui.

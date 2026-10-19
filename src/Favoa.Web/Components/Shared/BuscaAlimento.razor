@@ -89,12 +89,17 @@
                 <select class="seletor" aria-label="Unidade" @onchange="AoMudarUnidade">
                     <option value="g" selected="@(_unidade == "g")">g</option>
                     <option value="ml" selected="@(_unidade == "ml")">ml</option>
-                    @if (_escolhido.GramasPorcao is { } gp)
+                    @for (var n = 0; n < _escolhido.Porcoes.Count; n++)
                     {
-                        <option value="porcao" selected="@(_unidade == "porcao")">@(string.IsNullOrWhiteSpace(_escolhido.NomePorcao) ? "porção" : _escolhido.NomePorcao) (@gp g)</option>
+                        var p = _escolhido.Porcoes[n];
+                        <option value="@($"p{n}")" selected="@(_unidade == $"p{n}")">@p.Nome.ToLowerInvariant() (@p.Gramas.ToString("0.#", PtBr) g)</option>
                     }
                 </select>
             </label>
+            @if (PorcaoEscolhida is { Estimada: true })
+            {
+                <span class="dados__meta busca-alimento__aviso">Medida média do IBGE (estimativa). Ajuste em Dieta → Alimentos.</span>
+            }
             <span class="busca-alimento__kcal">@(_unidade != "g" && Gramas is { } eq ? $"= {eq} g · " : "")@Kcal kcal</span>
             <button type="button" class="botao botao--primario botao--pequeno" disabled="@(Gramas is null)" @onclick="Confirmar">@TextoBotao</button>
             <button type="button" class="botao botao--fantasma botao--pequeno" @onclick="Limpar">Trocar</button>
@@ -105,15 +110,15 @@
 @code {
     [Parameter] public string Placeholder { get; set; } = "Buscar alimento (ex.: arroz, frango, banana)";
     [Parameter] public string TextoBotao { get; set; } = "Adicionar";
-    [Parameter] public EventCallback<(AlimentoResumo Alimento, int Gramas)> AoEscolher { get; set; }
+    /// <summary>Alimento, gramas equivalentes e como foi digitado: unidade ("g", "ml" ou nome da medida) e quantidade.</summary>
+    [Parameter] public EventCallback<(AlimentoResumo Alimento, int Gramas, string Unidade, double Quantidade)> AoEscolher { get; set; }
     /// <summary>Alimentos que a pessoa mais lança, para escolher com um toque (já vem com a última quantidade).</summary>
     [Parameter] public IReadOnlyList<AlimentoRecente> Recentes { get; set; } = [];
 
     private void EscolherRecente(AlimentoRecente r)
     {
         Escolher(r.Alimento);
-        _unidade = "g";
-        _qtd = r.Gramas;
+        if (r.Alimento.UltimaQuantidade is null) { _unidade = "g"; _qtd = r.Gramas; }
     }
 
     private static readonly CultureInfo PtBr = new("pt-BR");
@@ -126,8 +131,14 @@
     private string _unidade = "g";
 
     /// <summary>Gramas equivalentes: ml conta 1 para 1 (densidade da água) e a porção usa os gramas dela.</summary>
-    private double Fator => _unidade == "porcao" && _escolhido?.GramasPorcao is { } gp ? gp : 1;
-    private int? Gramas => _qtd is > 0 ? (int)Math.Max(1, Math.Round(_qtd.Value * Fator)) : null;
+    private double Fator => PorcaoEscolhida?.Gramas ?? 1;
+
+    private string NomeDaUnidade => PorcaoEscolhida?.Nome ?? (_unidade == "ml" ? "ml" : "g");
+
+    private PorcaoResumo? PorcaoEscolhida =>
+        _unidade.Length > 1 && _unidade[0] == 'p' && int.TryParse(_unidade.AsSpan(1), out var n) && _escolhido is { } a && n >= 0 && n < a.Porcoes.Count
+            ? a.Porcoes[n] : null;
+    private int? Gramas => _qtd is > 0 ? (int)Math.Max(1, Math.Round(_qtd.Value * Fator, MidpointRounding.AwayFromZero)) : null;
     private int _destaque;
     private int _versao;
     private bool _buscando;
@@ -182,8 +193,17 @@
     private void Escolher(AlimentoResumo a)
     {
         _escolhido = a;
-        _unidade = a.GramasPorcao is null ? "g" : "porcao";
-        _qtd = a.GramasPorcao is null ? 100 : 1;
+        // Abre como você lançou da última vez; sem histórico, na unidade padrão (1 ovo, 1 fatia) ou em 100 g.
+        var ultima = a.UltimaUnidade is null ? -1 : a.Porcoes.ToList().FindIndex(p => string.Equals(p.Nome, a.UltimaUnidade, StringComparison.OrdinalIgnoreCase));
+        if (a.UltimaQuantidade is > 0 && (ultima >= 0 || a.UltimaUnidade is "g" or "ml"))
+        {
+            _unidade = ultima >= 0 ? $"p{ultima}" : a.UltimaUnidade!;
+            _qtd = a.UltimaQuantidade;
+            return;
+        }
+        var padrao = a.Porcoes.ToList().FindIndex(p => p.Padrao);
+        _unidade = padrao < 0 ? "g" : $"p{padrao}";
+        _qtd = padrao < 0 ? 100 : 1;
     }
 
     private void AoMudarUnidade(ChangeEventArgs e)
@@ -202,7 +222,7 @@
     private async Task Confirmar()
     {
         if (_escolhido is null || Gramas is not { } gramas) return;
-        await AoEscolher.InvokeAsync((_escolhido, gramas));
+        await AoEscolher.InvokeAsync((_escolhido, gramas, NomeDaUnidade, _qtd!.Value));
         Limpar();
     }
 

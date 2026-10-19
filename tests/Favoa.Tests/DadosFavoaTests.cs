@@ -57,8 +57,12 @@ public sealed class DadosFavoaTests : IAsyncLifetime
         var (origemServico, origem) = await NovoBanco();
         foreach (var f in new[] { "orçamento 3000", "gastei 32,50 no mercado com o nubank", "recebi 5000 de salário",
                                   "tarefa pagar luz sexta", "novo hábito ler", "fiz ler", "bebi 500 ml",
-                                  "supino 3x10 40kg", "corri 5km 30min", "comi 150g de arroz tipo 1 cozido no almoço", "peso 82,5" })
+                                  "supino 3x10 40kg", "corri 5km 30min", "comi 150g de arroz tipo 1 cozido no almoço", "comi 2 ovos no café da manhã", "peso 82,5" })
             await Registrar(origemServico, f);
+        // Uma medida da casa (ajuste do catálogo): sai no arquivo e volta; as do IBGE voltam sozinhas.
+        var fitnessOrigem = new FitnessServico(_fabricas[origem], new Favoa.Core.Pessoas.PessoaFixa(_pessoas[origem]));
+        var ovo = (await fitnessOrigem.BuscarAlimentosAsync("ovo galinha inteiro cru", 5)).First(a => a.Porcoes.Count > 0);
+        Assert.True((await fitnessOrigem.SalvarPorcaoAsync(ovo.Id, "Unidade", 58)).Sucesso);
         var arquivo = await origem.ExportarJsonAsync();
 
         var (destinoServico, destino) = await NovoBanco();
@@ -77,6 +81,13 @@ public sealed class DadosFavoaTests : IAsyncLifetime
         var r = await destino.ImportarJsonAsync(arquivo.Conteudo);
         Assert.True(r.Sucesso, r.Mensagem);
         Assert.True(File.Exists(r.BackupAntes));
+
+        await using (var db = await _fabricas[destino].CreateDbContextAsync())
+        {
+            Assert.True(await db.Porcoes.CountAsync(p => p.Origem == "IBGE") > 6000);
+            Assert.Equal(58, (await db.Porcoes.SingleAsync(p => p.Origem == "Meu")).Gramas);
+            Assert.Contains(await db.Consumos.ToListAsync(), c => c.Unidade == "Unidade" && c.Quantidade == 2);
+        }
 
         var painelOrigem = await origemServico.ObterPainelAsync(Hoje);
         Assert.True(painelOrigem.Resumo.TemTreinos);

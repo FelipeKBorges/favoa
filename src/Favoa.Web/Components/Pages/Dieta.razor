@@ -158,7 +158,7 @@
                                 {
                                     <li @key="c.Id">
                                         <span class="refeicao__alimento">@c.Alimento</span>
-                                        <span class="dados__meta">@c.Gramas g · P @c.Macros.Proteina.ToString("0", PtBr) g</span>
+                                        <span class="dados__meta">@(c.Medida is null ? "" : c.Medida + " · ")@c.Gramas g · P @c.Macros.Proteina.ToString("0", PtBr) g</span>
                                         <span class="refeicao__item-kcal">@N(c.Macros.Kcal) kcal</span>
                                         <button type="button" class="botao-icone botao-icone--discreto" aria-label="Remover @c.Alimento" @onclick="() => RemoverConsumo(c.Id)">
                                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
@@ -269,7 +269,7 @@
                         {
                             <li @key="p.Id">
                                 <span class="refeicao__alimento">@p.Alimento</span>
-                                <span class="dados__meta">@p.Gramas g · P @p.Macros.Proteina.ToString("0", PtBr) g</span>
+                                <span class="dados__meta">@(p.Medida is null ? "" : p.Medida + " · ")@p.Gramas g · P @p.Macros.Proteina.ToString("0", PtBr) g</span>
                                 <span class="refeicao__item-kcal">@N(p.Macros.Kcal) kcal</span>
                                 <button type="button" class="botao-icone botao-icone--discreto" aria-label="Tirar @p.Alimento do plano" @onclick="() => RemoverDoPlano(p.Id)">
                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
@@ -317,11 +317,57 @@
             @if (_consultados.Count > 0)
             {
                 <table class="tabela">
-                    <thead><tr><th>Alimento (100 g)</th><th>Kcal</th><th>Prot.</th><th>Carb.</th><th>Gord.</th></tr></thead>
+                    <thead><tr><th>Alimento (100 g)</th><th>Kcal</th><th>Prot.</th><th>Carb.</th><th>Gord.</th><th><span class="so-leitor">Medidas</span></th></tr></thead>
                     <tbody>
                         @foreach (var a in _consultados)
                         {
-                            <tr><td>@a.Nome <span class="dados__meta">@(a.Marca is null ? a.Fonte : $"{a.Marca} · {a.Fonte}")</span></td><td>@a.Kcal.ToString("0")</td><td>@a.Proteina.ToString("0.#", PtBr)</td><td>@a.Carboidrato.ToString("0.#", PtBr)</td><td>@a.Gordura.ToString("0.#", PtBr)</td></tr>
+                            <tr><td>@a.Nome <span class="dados__meta">@(a.Marca is null ? a.Fonte : $"{a.Marca} · {a.Fonte}")</span></td><td>@a.Kcal.ToString("0")</td><td>@a.Proteina.ToString("0.#", PtBr)</td><td>@a.Carboidrato.ToString("0.#", PtBr)</td><td>@a.Gordura.ToString("0.#", PtBr)</td>
+                                <td><button type="button" class="botao botao--fantasma botao--pequeno" aria-expanded="@(_medidasDe == a.Id)" @onclick="() => AbrirMedidas(a.Id)">Medidas@(a.Porcoes.Count > 0 ? $" ({a.Porcoes.Count})" : "")</button></td></tr>
+                            @if (_medidasDe == a.Id)
+                            {
+                                <tr class="tabela__detalhe">
+                                    <td colspan="6">
+                                        @if (_porcoesEdicao.Count == 0)
+                                        {
+                                            <p class="dados__meta">Sem medidas caseiras. Crie a primeira abaixo (ex.: fatia = 25 g).</p>
+                                        }
+                                        else
+                                        {
+                                            <ul class="medidas">
+                                                @foreach (var p in _porcoesEdicao)
+                                                {
+                                                    <li @key="p.Id">
+                                                        <span>1 @p.Nome.ToLower(PtBr) = @p.Gramas.ToString("0.#", PtBr) g</span>
+                                                        <span class="dados__meta">@(p.DaCasa ? (p.Ajustada ? "ajustada por você" : "sua") : "IBGE (média)")</span>
+                                                        @if (p.DaCasa)
+                                                        {
+                                                            <button type="button" class="botao-icone botao-icone--discreto" aria-label="@(p.Ajustada ? "Voltar ao valor do IBGE" : "Remover") @p.Nome" @onclick="() => RemoverMedida(p.Id)">
+                                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+                                                            </button>
+                                                        }
+                                                    </li>
+                                                }
+                                            </ul>
+                                        }
+                                        <div class="campo-linha">
+                                            <div class="campo"><label for="m-nome">Medida</label><input id="m-nome" type="text" list="m-sugestoes" placeholder="fatia, colher de sopa, pote" @bind="_medidaNome" /></div>
+                                            <datalist id="m-sugestoes">
+                                                @foreach (var p in _porcoesEdicao)
+                                                {
+                                                    <option value="@p.Nome"></option>
+                                                }
+                                            </datalist>
+                                            <div class="campo"><label for="m-g">Gramas</label><input id="m-g" type="number" min="0.1" step="0.1" inputmode="decimal" @bind="_medidaGramas" /></div>
+                                            <button type="button" class="botao botao--pequeno" @onclick="() => SalvarMedida(a.Id)">Salvar medida</button>
+                                        </div>
+                                        <p class="dados__meta">Com o nome de uma medida do IBGE, o valor vale só para a sua casa.</p>
+                                        @if (_erroMedida is not null)
+                                        {
+                                            <p class="captura__aviso" role="alert">@_erroMedida</p>
+                                        }
+                                    </td>
+                                </tr>
+                            }
                         }
                     </tbody>
                 </table>
@@ -482,15 +528,15 @@
         if (r.Sucesso) await Eventos.NotificarRegistroSalvoAsync();
     }
 
-    private async Task AdicionarConsumo(Refeicao refeicao, (AlimentoResumo Alimento, int Gramas) x) =>
-        await Notificar(await Fitness.AdicionarConsumoAsync(_data, refeicao, x.Alimento.Id, x.Gramas));
+    private async Task AdicionarConsumo(Refeicao refeicao, (AlimentoResumo Alimento, int Gramas, string Unidade, double Quantidade) x) =>
+        await Notificar(await Fitness.AdicionarConsumoAsync(_data, refeicao, x.Alimento.Id, x.Gramas, x.Unidade, x.Quantidade));
 
     private async Task RemoverConsumo(Guid id) => await Notificar(await Fitness.RemoverConsumoAsync(id));
 
     private async Task SeguirPlano(Refeicao refeicao) => await Notificar(await Fitness.SeguirPlanoAsync(_data, refeicao));
 
-    private async Task AdicionarAoPlano(Refeicao refeicao, (AlimentoResumo Alimento, int Gramas) x) =>
-        await Notificar(await Fitness.AdicionarItemPlanoAsync(refeicao, x.Alimento.Id, x.Gramas));
+    private async Task AdicionarAoPlano(Refeicao refeicao, (AlimentoResumo Alimento, int Gramas, string Unidade, double Quantidade) x) =>
+        await Notificar(await Fitness.AdicionarItemPlanoAsync(refeicao, x.Alimento.Id, x.Gramas, x.Unidade, x.Quantidade));
 
     private async Task RemoverDoPlano(Guid id) => await Notificar(await Fitness.RemoverItemPlanoAsync(id));
 
@@ -515,6 +561,43 @@
         _consulta = _novo.Nome;
         _novo = new();
         Eventos.MostrarMensagem(r.Mensagem);
+        await Consultar();
+    }
+
+    private Guid? _medidasDe;
+    private IReadOnlyList<PorcaoEdicao> _porcoesEdicao = [];
+    private string _medidaNome = "";
+    private double? _medidaGramas;
+    private string? _erroMedida;
+
+    private async Task AbrirMedidas(Guid alimentoId)
+    {
+        _erroMedida = null;
+        _medidaNome = "";
+        _medidaGramas = null;
+        if (_medidasDe == alimentoId) { _medidasDe = null; return; }
+        _medidasDe = alimentoId;
+        _porcoesEdicao = await Fitness.ObterPorcoesAsync(alimentoId);
+    }
+
+    private async Task SalvarMedida(Guid alimentoId)
+    {
+        var r = await Fitness.SalvarPorcaoAsync(alimentoId, _medidaNome, _medidaGramas ?? 0);
+        if (!r.Sucesso) { _erroMedida = r.Mensagem; return; }
+        _erroMedida = null;
+        _medidaNome = "";
+        _medidaGramas = null;
+        _porcoesEdicao = await Fitness.ObterPorcoesAsync(alimentoId);
+        await Consultar();
+        Eventos.MostrarMensagem(r.Mensagem);
+    }
+
+    private async Task RemoverMedida(Guid porcaoId)
+    {
+        var r = await Fitness.RemoverPorcaoAsync(porcaoId);
+        if (!r.Sucesso) { _erroMedida = r.Mensagem; return; }
+        _erroMedida = null;
+        if (_medidasDe is { } id) _porcoesEdicao = await Fitness.ObterPorcoesAsync(id);
         await Consultar();
     }
 

@@ -21,6 +21,8 @@
     <EmbeddedResource Include="taco.json" LogicalName="Favoa.Data.taco.json" />
     <!-- IBGE, Tabela de Composição Nutricional dos Alimentos Consumidos no Brasil (POF 2008-2009). Gerado de tabelacompleta.xls. -->
     <EmbeddedResource Include="ibge.json" LogicalName="Favoa.Data.ibge.json" />
+    <EmbeddedResource Include="medidas.json" LogicalName="Favoa.Data.medidas.json" />
+    <EmbeddedResource Include="medidas_taco.json" LogicalName="Favoa.Data.medidas_taco.json" />
   </ItemGroup>
 
 </Project>
