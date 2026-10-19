@@ -2228,3 +2228,19 @@ a.botao--primario, a.botao--primario:visited { color: var(--mel-tinta); }
 .busca-alimento__novo .dados__meta { flex: 1 1 100%; }
 .busca-alimento__novo input[type="text"] { width: 100%; }
 .busca-alimento__novo .mini input[type="number"] { width: 120px; }
+
+/* Detalhe do dia e Progresso: nada passa da largura da tela */
+.cal, .cal__detalhe, .cal__detalhe > *, .progresso, .progresso > * { min-width: 0; }
+.cal__detalhe { max-width: min(420px, 100%); }
+.detalhe__item > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.detalhe__valor { white-space: normal; overflow-wrap: anywhere; text-align: right; }
+.detalhe__item--duas { flex-direction: column; align-items: flex-start; gap: 2px; padding: 4px 0; }
+.detalhe__item--duas .detalhe__valor { text-align: left; font-size: 13px; color: var(--texto-suave); }
+@media (max-width: 760px) {
+  .cal { gap: 16px; }
+  .cal__detalhe { max-width: 100%; flex-basis: 100%; position: static; }
+  .detalhe__areas { display: none; }
+  .gp__plano { margin: 28px 36px 0 34px; height: 160px; }
+  .gp__x { margin: 0 36px 0 34px; }
+  .progresso__numeros { gap: 8px 24px; }
+}

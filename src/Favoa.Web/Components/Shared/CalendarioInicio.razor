@@ -179,7 +179,7 @@
                         default:
                             foreach (var i in doTipo)
                             {
-                                <div class="detalhe__item">
+                                <div class="detalhe__item @(tipo == TipoItemDia.Treino ? "detalhe__item--duas" : "")">
                                     <span>@i.Texto</span>
                                     @if (i.Detalhe is not null) { <span class="detalhe__valor">@i.Detalhe</span> }
                                 </div>
