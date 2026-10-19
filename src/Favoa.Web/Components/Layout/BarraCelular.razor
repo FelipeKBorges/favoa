@@ -13,9 +13,9 @@
         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
     </button>
     @foreach (var d in Fixos.Skip(2).Take(1)) { @Item(d) }
-    <button type="button" class="barra-celular__item @(MaisAtivo ? "active" : "")" aria-haspopup="dialog" aria-label="@(MaisAtivo ? $"{RotuloMais}, mais seções" : "Mais seções")" aria-expanded="@_menuAberto" @onclick="() => _menuAberto = true">
+    <button type="button" class="barra-celular__item @(MaisAtivo ? "active" : "")" aria-haspopup="dialog" aria-label="Mais seções" aria-expanded="@_menuAberto" @onclick="() => _menuAberto = true">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
-        <span>@RotuloMais</span>
+        <span>Mais</span>
     </button>
 </nav>
 
@@ -70,6 +70,14 @@
         </div>
         @if (_modo is null)
         {
+            <button type="button" class="painel__frase-campo" @onclick="AbrirFrase">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 20l4-1 11-11a2.1 2.1 0 00-3-3L5 16z" /></svg>
+                <span class="painel__frase-texto">
+                    <strong>Escreva o que aconteceu</strong>
+                    <span>uber 23 · comi 2 ovos · supino 3x10 40kg</span>
+                </span>
+            </button>
+            <p class="painel__ou">ou escolha</p>
             <div class="painel__grade">
                 @foreach (var b in Blocos)
                 {
@@ -80,7 +88,6 @@
                     </button>
                 }
             </div>
-            <button type="button" class="botao botao--fantasma botao--pequeno painel__frase" @onclick="AbrirFrase">Escrever uma frase</button>
         }
         else
         {
@@ -149,7 +156,7 @@
     ];
 
     private const string ChaveBarra = "favoa_barra";
-    private static readonly string[] Padrao = ["hoje", "financas", "tarefas"];
+    private static readonly string[] Padrao = ["hoje", "financas", "fitness"];
     private List<string> _escolhidos = [.. Padrao];
     private bool _personalizando;
 
@@ -184,16 +191,6 @@
     private static bool Combina(Destino m, string rota) =>
         m.Href != "" && (rota.StartsWith(m.Href, StringComparison.OrdinalIgnoreCase)
             || (m.Chave == "fitness" && (rota.StartsWith("dieta", StringComparison.OrdinalIgnoreCase) || rota.StartsWith("medidas", StringComparison.OrdinalIgnoreCase))));
-
-    private string RotuloMais
-    {
-        get
-        {
-            var rota = Nav.ToBaseRelativePath(Nav.Uri).Split('?')[0];
-            var atual = NoMais.FirstOrDefault(m => Combina(m, rota));
-            return atual is null ? "Mais" : atual.Rotulo == "Seus dados" ? "Dados" : atual.Rotulo;
-        }
-    }
 
     private string ClasseItem(Destino d) => d.Chave == "fitness" && Combina(d, RotaAtual) ? "barra-celular__item active" : "barra-celular__item";
 

@@ -2171,3 +2171,16 @@ a.botao--primario, a.botao--primario:visited { color: var(--mel-tinta); }
   .refeicao__alimento { flex: 1 1 100%; padding-top: 6px; }
   .refeicao__itens li .dados__meta { flex: 1 1 0; min-width: 0; }
 }
+
+/* Botão desabilitado: cinza neutro (o âmbar apagado parecia defeito) */
+.botao--primario:disabled { opacity: 1; background: var(--superficie-2); color: var(--texto-apagado); border-color: var(--borda); cursor: default; box-shadow: none; }
+.captura__acoes .botao:disabled { opacity: 1; }
+
+/* Painel Lançar: a frase é o caminho principal */
+.painel__frase-campo { width: 100%; display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 10px 14px; margin: .25rem 0 .5rem; background: var(--superficie); color: var(--texto); border: 1.5px solid var(--mel); border-radius: 14px; font: inherit; text-align: left; cursor: text; }
+.painel__frase-campo svg { color: var(--mel); flex: none; }
+.painel__frase-texto { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.painel__frase-texto strong { font-size: 16px; }
+.painel__frase-texto span { font-size: 13px; color: var(--texto-suave); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.painel__ou { margin: .5rem 0 0; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--texto-apagado); }
+.extrato__todos { width: 100%; margin-top: 8px; }

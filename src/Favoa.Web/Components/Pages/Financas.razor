@@ -65,7 +65,7 @@
             </div>
             <div class="cartao resumo__item">
                 <div class="rotulo">Saldo</div>
-                <div class="resumo__valor @(e.SaldoCentavos < 0 ? "resumo__valor--negativo" : "")">@MoedaComSinal(e.SaldoCentavos)</div>
+                <div class="resumo__valor @(e.SaldoCentavos < 0 && e.ReceitasCentavos > 0 ? "resumo__valor--negativo" : "")">@MoedaComSinal(e.SaldoCentavos)</div>
                 @if (e.Filtro.TemFiltro)
                 {
                     <div class="resumo__detalhe">só o que está filtrado</div>
@@ -92,7 +92,7 @@
                 }
                 else
                 {
-                    <p class="vazio">Sem orçamento para o mês. Defina um valor para ver o ritmo dos gastos.</p>
+                    <p class="vazio">Quanto você quer gastar neste mês?</p>
                     <div class="orcamento__definir">
                         <label class="mini mini--largo"><span>Orçamento do mês (R$)</span>
                             <input type="text" inputmode="decimal" placeholder="3000" autocomplete="off" @bind="_orcamentoNovo" @bind:event="oninput" @onkeydown="AoTeclarOrcamento" />
@@ -114,9 +114,11 @@
                 @{
                     var totalLanc = e.Dias.Sum(d => d.Lancamentos.Count);
                     var aberto = _extratoAberto || e.Filtro.TemFiltro || _busca.Length > 0;
+                    // Fechado, mostra só os 5 últimos: quem acabou de lançar vê o que fez sem abrir nada.
+                    var diasVisiveis = aberto ? e.Dias : UltimosDias(e.Dias, 5);
                 }
                 <button type="button" class="extrato__cabeca" aria-expanded="@aberto" aria-controls="extrato-conteudo" @onclick="() => _extratoAberto = !_extratoAberto">
-                    <span class="extrato__titulo">Histórico de lançamentos</span>
+                    <span class="extrato__titulo">@(aberto ? "Lançamentos" : "Últimos lançamentos")</span>
                     <span class="dados__meta">@(totalLanc == 1 ? "1 lançamento" : $"{totalLanc} lançamentos")</span>
                     <svg class="extrato__seta @(aberto ? "extrato__seta--aberta" : "")" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
                 </button>
@@ -179,6 +181,10 @@
                     </div>
                 }
 
+                </div>
+                }
+
+                <div class="extrato__conteudo">
                 @if (e.Dias.Count == 0)
                 {
                     <div class="cartao extrato__vazio">
@@ -194,7 +200,7 @@
                     </div>
                 }
 
-                @foreach (var dia in e.Dias)
+                @foreach (var dia in diasVisiveis)
                 {
                     <div class="dia">
                         <h2 class="dia__topo">
@@ -223,8 +229,11 @@
                         </ul>
                     </div>
                 }
-                </div>
+                @if (!aberto && totalLanc > 5)
+                {
+                    <button type="button" class="botao botao--fantasma extrato__todos" @onclick="() => _extratoAberto = true">Ver todos os @totalLanc e filtrar</button>
                 }
+                </div>
             </section>
 
             <aside class="cartao categorias" aria-labelledby="titulo-categorias">
@@ -281,6 +290,20 @@
     private string _busca = "";
     private bool _filtrosAbertos;
     private bool _extratoAberto;
+
+    private static IReadOnlyList<DiaExtrato> UltimosDias(IReadOnlyList<DiaExtrato> dias, int max)
+    {
+        var saida = new List<DiaExtrato>();
+        var restam = max;
+        foreach (var d in dias)
+        {
+            if (restam <= 0) break;
+            var linhas = d.Lancamentos.Take(restam).ToList();
+            saida.Add(new DiaExtrato(d.Data, linhas));
+            restam -= linhas.Count;
+        }
+        return saida;
+    }
     private string _orcamentoNovo = "";
     private string? _orcamentoErro;
 
