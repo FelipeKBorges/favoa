@@ -2244,3 +2244,14 @@ a.botao--primario, a.botao--primario:visited { color: var(--mel-tinta); }
   .gp__x { margin: 0 36px 0 34px; }
   .progresso__numeros { gap: 8px 24px; }
 }
+
+/* Celular: revisão geral de encaixe */
+.conta__email { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 760px) {
+  .semana { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .semana__bloco { padding: 14px; }
+  .semana__numero { font-size: 1.5rem; }
+  .cadastros__abas { display: flex; overflow-x: auto; scrollbar-width: none; }
+  .cadastros__abas .segmento__opcao { flex: none; }
+  .progresso__subtitulo, .progresso .mapa { display: none; }
+}

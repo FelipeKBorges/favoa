@@ -42,7 +42,7 @@
                     <h2 class="treino-inicio__titulo">@prox.Nome</h2>
                     <p class="treino-inicio__itens">@string.Join(" · ", prox.Itens.Select(i => i.Exercicio))</p>
                     <div class="dados__acoes">
-                        <button type="button" class="botao botao--primario" @onclick="() => Comecar(prox.Id)">Começar @prox.Nome</button>
+                        <button type="button" class="botao botao--primario" @onclick="() => Comecar(prox.Id)">Começar este treino</button>
                         @foreach (var f in _painel.Fichas.Where(f => f.Id != prox.Id))
                         {
                             <button type="button" class="botao" @onclick="() => Comecar(f.Id)">@f.Nome</button>
