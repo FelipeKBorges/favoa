@@ -383,6 +383,8 @@ public sealed class CadastrosServicoTests : IAsyncLifetime
         var q = await _cadastros.ObterAsync(Hoje);
         var carteira = q.Contas.Single(c => c.Nome == "Carteira");
         var nubank = q.Contas.Single(c => c.Nome == "Nubank");
+        foreach (var extra in q.Contas.Where(c => c.Nome is "Conta corrente" or "Cartão de crédito")) // contas iniciais da casa nova
+            Assert.True((await _cadastros.ExcluirContaAsync(extra.Id, carteira.Id)).Sucesso);
 
         await _favoa.RegistrarAsync(new Interpretacao(TipoCaptura.Receita, "") { ValorCentavos = 10000, Categoria = "Salário", Conta = "Nubank", Data = Hoje });
         Assert.Equal(10000, (await _cadastros.ObterAsync(Hoje)).Contas.Single(c => c.Id == nubank.Id).SaldoCentavos);

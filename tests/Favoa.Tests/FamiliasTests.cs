@@ -58,10 +58,10 @@ public sealed class FamiliasTests : IAsyncLifetime
     {
         await using var a = await Abrir(_ana);
         await using var b = await Abrir(_bia);
-        Assert.Equal(11, await a.Categorias.CountAsync());
-        Assert.Equal(11, await b.Categorias.CountAsync());
-        Assert.Equal("Carteira", (await a.Contas.SingleAsync()).Nome);
-        Assert.Equal("Carteira", (await b.Contas.SingleAsync()).Nome);
+        Assert.Equal(13, await a.Categorias.CountAsync());
+        Assert.Equal(13, await b.Categorias.CountAsync());
+        Assert.Equal(3, await a.Contas.CountAsync());
+        Assert.Equal(3, await b.Contas.CountAsync());
         Assert.Empty((await a.Categorias.Select(c => c.Id).ToListAsync()).Intersect(await b.Categorias.Select(c => c.Id).ToListAsync()));
     }
 

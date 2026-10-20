@@ -331,11 +331,14 @@ public sealed class AcessoServico(IDbContextFactory<FavoaDbContext> fabrica, Tim
     /// <summary>Categorias e conta iniciais de uma família nova (a família antiga já tem as dela).</summary>
     internal static void SemearFamilia(FavoaDbContext db, Guid familiaId)
     {
-        string[] despesas = ["Mercado", "Alimentação fora", "Moradia", "Transporte", "Saúde", "Lazer", "Assinaturas", "Outros"];
+        string[] despesas = ["Mercado", "Alimentação fora", "Moradia", "Transporte", "Saúde", "Lazer", "Educação", "Presentes", "Assinaturas", "Outros"];
         string[] receitas = ["Salário", "Extra", "Outros"];
         db.Categorias.AddRange(despesas.Select(n => new Categoria { Nome = n, Tipo = TipoLancamento.Despesa, FamiliaId = familiaId }));
         db.Categorias.AddRange(receitas.Select(n => new Categoria { Nome = n, Tipo = TipoLancamento.Receita, FamiliaId = familiaId }));
-        db.Contas.Add(new Conta { Nome = "Carteira", FamiliaId = familiaId });
+        // A primeira (mais antiga) é a conta padrão dos lançamentos sem conta: Carteira vem na frente de propósito.
+        var agora = DateTime.UtcNow;
+        string[] contas = ["Carteira", "Conta corrente", "Cartão de crédito"];
+        db.Contas.AddRange(contas.Select((n, i) => new Conta { Nome = n, FamiliaId = familiaId, CriadoEm = agora.AddMilliseconds(i) }));
     }
 
     private static (string Mensagem, bool Erro)? ValidarCredenciais(string? email, string? senha)

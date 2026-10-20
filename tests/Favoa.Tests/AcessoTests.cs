@@ -146,8 +146,9 @@ public sealed class AcessoServicoTests : IAsyncLifetime
         var familia = Assert.Single(db.Familias.ToList());
         Assert.Equal("Casa dos dois", familia.Nome);
         Assert.Equal(familia.Id, db.Pessoas.Single().FamiliaId);
-        Assert.Equal(11, db.Categorias.Count(c => c.FamiliaId == familia.Id));
-        Assert.Equal("Carteira", db.Contas.Single(c => c.FamiliaId == familia.Id).Nome);
+        Assert.Equal(13, db.Categorias.Count(c => c.FamiliaId == familia.Id));
+        var contas = db.Contas.Where(c => c.FamiliaId == familia.Id).OrderBy(c => c.CriadoEm).Select(c => c.Nome).ToList();
+        Assert.Equal(["Carteira", "Conta corrente", "Cartão de crédito"], contas); // a primeira é a conta padrão
 
         // Só uma vez.
         Assert.False((await _acesso.ConfigurarPrimeiroAcessoAsync(null, null, "Outro", "outro@exemplo.com", Senha)).Sucesso);
