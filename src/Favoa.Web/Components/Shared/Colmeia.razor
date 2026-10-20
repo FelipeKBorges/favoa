@@ -27,6 +27,7 @@
     </div>
 
     @* Celular: a colmeia encolhe, então o detalhe de cada célula vem aqui, em letra legível. *@
+    <details class="colmeia__detalhes"><summary>Detalhes por área</summary>
     <ul class="colmeia__lista" aria-label="Detalhes do dia">
         @foreach (var c in Celulas.Where(c => c.Chave != CelulaColmeia.Hoje))
         {
@@ -39,6 +40,7 @@
             </li>
         }
     </ul>
+    </details>
 </div>
 
 @code {

@@ -2255,3 +2255,23 @@ a.botao--primario, a.botao--primario:visited { color: var(--mel-tinta); }
   .cadastros__abas .segmento__opcao { flex: none; }
   .progresso__subtitulo, .progresso .mapa { display: none; }
 }
+
+/* Menos informação de uma vez: o essencial primeiro, o resto sob demanda */
+.colmeia__detalhes { display: none; width: 100%; }
+.colmeia__detalhes > summary {
+  list-style: none; cursor: pointer; text-align: center; color: var(--texto-suave); font-size: 14px;
+  min-height: 44px; display: flex; align-items: center; justify-content: center; gap: 6px;
+}
+.colmeia__detalhes > summary::-webkit-details-marker { display: none; }
+.colmeia__detalhes > summary::after { content: "⌄"; font-size: 16px; transition: transform .15s; }
+.colmeia__detalhes[open] > summary::after { transform: rotate(180deg); }
+@media (max-width: 760px) {
+  .colmeia__detalhes { display: block; }
+  .acoes-rapidas { display: none !important; }
+  .proxima__item:nth-child(n+2) { display: none; }
+  .proxima { padding: 12px 14px; margin-bottom: 8px; }
+  .semana-link { font-size: 14px; font-weight: 500; color: var(--texto-suave); min-height: 0; line-height: 1.4; padding: 6px 0; margin: 0; }
+  .inicio .saudacao p { display: none; }
+  .cal__filtro, .progresso__areas { display: none; }
+  .dados__dica { display: none; }
+}
