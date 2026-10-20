@@ -2275,3 +2275,19 @@ a.botao--primario, a.botao--primario:visited { color: var(--mel-tinta); }
   .cal__filtro, .progresso__areas { display: none; }
   .dados__dica { display: none; }
 }
+
+/* Painel "Mais": linhas de uma linha só, rodapé enxuto e sem corte embaixo */
+.painel__link { min-height: 52px; }
+.painel__link > span:first-child { white-space: nowrap; flex: none; }
+.painel__dica { min-width: 0; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.painel { max-height: min(88vh, 88dvh); }
+.painel__personalizar { align-self: flex-start; margin: 2px 0 0; }
+.painel__tema { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 4px 0 0; padding-top: 12px; border-top: 1px solid var(--borda); }
+.painel__tema .dados__meta { flex: none; }
+.painel__tema .segmento { margin-left: auto; max-width: 100%; }
+.painel__tema .segmento__opcao { padding-inline: 12px; min-height: 40px; }
+@media (max-width: 380px) {
+  .painel__tema { flex-direction: column; align-items: stretch; gap: 6px; }
+  .painel__tema .segmento { margin-left: 0; display: flex; }
+  .painel__tema .segmento__opcao { flex: 1; padding-inline: 6px; }
+}

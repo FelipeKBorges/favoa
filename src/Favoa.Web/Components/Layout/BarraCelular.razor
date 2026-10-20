@@ -35,10 +35,6 @@
         <button type="button" class="botao botao--fantasma botao--pequeno painel__personalizar" aria-expanded="@_personalizando" @onclick="() => _personalizando = !_personalizando">
             Personalizar a barra de baixo
         </button>
-        <div class="painel__tema">
-            <span class="dados__meta">Aparência</span>
-            <EscolhaTema />
-        </div>
         @if (_personalizando)
         {
             <fieldset class="painel__escolha">
@@ -54,6 +50,10 @@
                 }
             </fieldset>
         }
+        <div class="painel__tema">
+            <span class="dados__meta">Aparência</span>
+            <EscolhaTema />
+        </div>
     </div>
 }
 
@@ -151,7 +151,7 @@
 
     private static readonly Destino[] Sempre =
     [
-        new("cadastros", "cadastros", "Contas e categorias", "contas, categorias, lembretes", ""),
+        new("cadastros", "cadastros", "Contas e categorias", "contas e lembretes", ""),
         new("dados", "dados", "Seus dados", "backup, pessoas e PIN", ""),
     ];
 
