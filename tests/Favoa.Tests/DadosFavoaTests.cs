@@ -92,7 +92,10 @@ public sealed class DadosFavoaTests : IAsyncLifetime
         var painelOrigem = await origemServico.ObterPainelAsync(Hoje);
         Assert.True(painelOrigem.Resumo.TemTreinos);
         // As pessoas vêm do arquivo (com os mesmos ids): o destino passa a ver os dados como a pessoa de origem.
-        var painelDestino = await new FavoaServico(_fabricas[destino], new Favoa.Core.Pessoas.PessoaFixa(_pessoas[origem])).ObterPainelAsync(Hoje);
+        // O orçamento passa a ser da casa que importou: lê-se com a família dela.
+        Guid familiaDestino;
+        await using (var dbf = await _fabricas[destino].CreateDbContextAsync()) familiaDestino = await dbf.Familias.Select(f => f.Id).SingleAsync();
+        var painelDestino = await new FavoaServico(_fabricas[destino], new Favoa.Core.Pessoas.PessoaFixa(_pessoas[origem], familiaDestino)).ObterPainelAsync(Hoje);
         Assert.Equal(painelOrigem.Resumo, painelDestino.Resumo);
 
         // Exportar de novo dá o mesmo conteúdo (fora a data de exportação).

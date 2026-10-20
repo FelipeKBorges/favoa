@@ -161,7 +161,7 @@ public sealed class DadosFavoa(IDbContextFactory<FavoaDbContext> fabrica, Opcoes
                 .Select(x => new AguaJson(x.Id, x.Mililitros, x.Data, x.CriadoEm) { PessoaId = x.PessoaId }).ToListAsync(ct),
             (await db.Configuracoes.AsNoTracking().OrderBy(x => x.Chave).ToListAsync(ct))
                 .Where(x => !AcessoServico.EhChaveLocal(x.Chave)) // PIN e chaves de notificação são deste computador: não saem no arquivo
-                .Select(x => new ConfiguracaoJson(x.Chave, x.Valor)).ToList())
+                .Select(x => new ConfiguracaoJson(x.Chave.StartsWith(Configuracao.OrcamentoMensalCentavos + "#") ? Configuracao.OrcamentoMensalCentavos : x.Chave, x.Valor)).ToList()) // o arquivo leva a chave simples; ao importar vira a da casa
         {
             Exercicios = await db.Exercicios.AsNoTracking().OrderBy(x => x.Nome)
                 .Select(x => new ExercicioJson(x.Id, x.Nome, x.Grupo, x.Tipo, x.Ativo, x.CriadoEm)).ToListAsync(ct),
@@ -423,7 +423,7 @@ public sealed class DadosFavoa(IDbContextFactory<FavoaDbContext> fabrica, Opcoes
             db.RegistrosAgua.AddRange(pacote.Agua.Select(x => new RegistroAgua { Id = x.Id, Mililitros = x.Mililitros, Data = x.Data, CriadoEm = x.CriadoEm, PessoaId = Dono(x.PessoaId) }));
             db.Configuracoes.AddRange(pacote.Configuracoes
                 .Where(x => !AcessoServico.EhChaveLocal(x.Chave))
-                .Select(x => new Configuracao { Chave = x.Chave, Valor = x.Valor }));
+                .Select(x => new Configuracao { Chave = x.Chave == Configuracao.OrcamentoMensalCentavos ? AbrirBanco.ChaveDaFamilia(x.Chave, familiaId) : x.Chave, Valor = x.Valor }));
 
             if (temFitness)
             {

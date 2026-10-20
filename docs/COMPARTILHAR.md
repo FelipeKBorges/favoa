@@ -39,5 +39,6 @@ powershell -ExecutionPolicy Bypass -File .\ferramentas\instalar-inicializacao.ps
 
 - Exportar, importar e "recomeçar do zero" só funcionam com **uma** família no banco; com duas ficam bloqueados.
 - O backup diário copia o banco inteiro (as duas casas), na sua pasta de dados.
-- Esqueceu a senha: só quem tem acesso ao PC redefine (`--redefinir-senha e-mail nova-senha`).
+- Esqueceu a senha: no PC, logado como dono, abra `http://localhost:5080/admin/senhas`, clique em **Gerar senha temporária** na conta da pessoa e passe a senha por um canal privado (ela troca em Seus dados). A página não abre por Tailscale, só no próprio computador. A linha de comando (`--redefinir-senha e-mail nova-senha`) continua valendo.
+- O orçamento do mês é de cada casa; o que existia antes das casas passou para a primeira.
 - Cookie vale 30 dias por aparelho; "Sair de todos os aparelhos" (em Seus dados) derruba todos.

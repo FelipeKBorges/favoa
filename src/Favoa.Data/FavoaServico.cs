@@ -131,7 +131,7 @@ public sealed partial class FavoaServico(IDbContextFactory<FavoaDbContext> fabri
 
         var resumo = new ResumoDoDia
         {
-            OrcamentoMensalCentavos = await LerConfigLong(db, Configuracao.OrcamentoMensalCentavos, 0, ct),
+            OrcamentoMensalCentavos = await LerConfigLong(db, ChaveOrcamento(db), 0, ct),
             DespesasDoMesCentavos = despesasMes,
             ReceitasDoMesCentavos = receitasMes,
             TarefasConcluidasHoje = concluidasHoje,
@@ -273,7 +273,7 @@ public sealed partial class FavoaServico(IDbContextFactory<FavoaDbContext> fabri
                 break;
 
             case TipoReferencia.Orcamento:
-                var cfg = await db.Configuracoes.FindAsync([Configuracao.OrcamentoMensalCentavos], ct);
+                var cfg = await db.Configuracoes.FindAsync([ChaveOrcamento(db)], ct);
                 if (cfg is null) return NaoEncontrado();
                 if (string.IsNullOrEmpty(r.ValorAnterior)) db.Configuracoes.Remove(cfg);
                 else cfg.Valor = r.ValorAnterior;
@@ -537,7 +537,7 @@ public sealed partial class FavoaServico(IDbContextFactory<FavoaDbContext> fabri
 
         // O orçamento é do mês inteiro: compara com todas as despesas, sem filtros.
         var gastoMes = doMes.Where(l => l.Tipo == TipoLancamento.Despesa).Sum(l => l.ValorCentavos);
-        var orcamento = await LerConfigLong(db, Configuracao.OrcamentoMensalCentavos, 0, ct);
+        var orcamento = await LerConfigLong(db, ChaveOrcamento(db), 0, ct);
         var ritmo = RitmoOrcamento.Calcular(hoje, f.Ano, f.Mes, orcamento, gastoMes);
 
         // Comparação justa: no mês corrente, o mês anterior só até o mesmo dia.
@@ -821,10 +821,10 @@ public sealed partial class FavoaServico(IDbContextFactory<FavoaDbContext> fabri
 
     private static async Task<ResultadoRegistro> DefinirOrcamento(FavoaDbContext db, Interpretacao i, CancellationToken ct)
     {
-        var cfg = await db.Configuracoes.FindAsync([Configuracao.OrcamentoMensalCentavos], ct);
+        var cfg = await db.Configuracoes.FindAsync([ChaveOrcamento(db)], ct);
         var anterior = cfg?.Valor ?? "";
         if (cfg is null)
-            db.Configuracoes.Add(new Configuracao { Chave = Configuracao.OrcamentoMensalCentavos, Valor = i.ValorCentavos!.Value.ToString() });
+            db.Configuracoes.Add(new Configuracao { Chave = ChaveOrcamento(db), Valor = i.ValorCentavos!.Value.ToString() });
         else
             cfg.Valor = i.ValorCentavos!.Value.ToString();
 
@@ -881,6 +881,9 @@ public sealed partial class FavoaServico(IDbContextFactory<FavoaDbContext> fabri
         var itens = await consulta.ToListAsync(ct);
         return itens.FirstOrDefault(x => Texto.Normalizar(nome(x)) == alvoNorm);
     }
+
+    /// <summary>O orçamento é da casa: cada família guarda o seu (a chave leva o id da família).</summary>
+    internal static string ChaveOrcamento(FavoaDbContext db) => AbrirBanco.ChaveDaFamilia(Configuracao.OrcamentoMensalCentavos, db.FamiliaAtual);
 
     private static async Task<long> LerConfigLong(FavoaDbContext db, string chave, long padrao, CancellationToken ct)
     {

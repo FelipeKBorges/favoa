@@ -1,3 +1,4 @@
+using System.Text;
 using System.Net;
 using System.Security.Claims;
 using Favoa.Core.Acesso;
@@ -238,6 +239,17 @@ public static class AcessoWeb
             return Results.Redirect("/");
         }).DisableAntiforgery();
 
+        // ---------- Senhas das contas (só no próprio computador, por quem é dono) ----------
+        // O app não manda e-mail: quem esquece a senha pede ao administrador do Fávoa, que gera uma temporária aqui.
+        app.MapGet("/admin/senhas", async (HttpContext ctx, IAcessoServico acesso) =>
+            await SenhasAsync(ctx, acesso, null));
+
+        app.MapPost("/admin/senhas/gerar", async (HttpContext ctx, IAcessoServico acesso) =>
+        {
+            var form = await ctx.Request.ReadFormAsync();
+            return await SenhasAsync(ctx, acesso, Guid.TryParse(form["usuario"], out var id) ? id : Guid.Empty);
+        }).DisableAntiforgery(); // cookie SameSite=Strict, e só vale no próprio computador
+
         app.MapGet("/sair", async (HttpContext ctx, string? aviso) =>
         {
             await ctx.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
@@ -245,6 +257,42 @@ public static class AcessoWeb
         });
 
         return app;
+    }
+
+    private static async Task<IResult> SenhasAsync(HttpContext ctx, IAcessoServico acesso, Guid? gerarPara)
+    {
+        var sessao = Guid.TryParse(ctx.User.FindFirst(ClaimUsuario)?.Value, out var eu) ? await acesso.ObterSessaoAsync(eu) : null;
+        if (sessao is not { Dono: true } || !EhLocal(ctx))
+            return Pagina("Senhas das contas", """
+                <p class="entrada__erro" role="alert">Esta página só abre no computador onde o Fávoa roda, com o login de dono.</p>
+                <p class="entrada__dica">Abra <strong>http://localhost:5080/admin/senhas</strong> nesse computador.</p>
+                """);
+
+        var aviso = "";
+        if (gerarPara is { } id)
+        {
+            var r = await acesso.GerarSenhaTemporariaAsync(id);
+            aviso = r.Sucesso && r.Senha is not null
+                ? $"""<p class="entrada__dica" role="status">{H(r.Mensagem)}</p><p class="entrada__dica">Senha temporária (aparece só agora):</p><p><code style="font-size:1.4rem;letter-spacing:.05em">{H(r.Senha)}</code></p><p class="entrada__dica">Passe para a pessoa por um canal privado. Ao entrar, ela troca em Seus dados.</p>"""
+                : $"""<p class="entrada__erro" role="alert">{H(r.Mensagem)}</p>""";
+        }
+
+        var linhas = new StringBuilder();
+        foreach (var c in await acesso.ListarContasAsync())
+            linhas.Append($"""
+                <form method="post" action="/admin/senhas/gerar" class="entrada__form" style="margin:.75rem 0;padding-top:.75rem;border-top:1px solid var(--borda)">
+                  <p style="margin:0"><strong>{H(c.Pessoa)}</strong> · {H(c.Casa)}{(c.Dono ? " · dono" : "")}<br><span class="entrada__dica">{H(c.Email)}</span></p>
+                  <input type="hidden" name="usuario" value="{c.UsuarioId}" />
+                  <button type="submit" class="botao">Gerar senha temporária</button>
+                </form>
+                """);
+
+        return Pagina("Senhas das contas", $"""
+            <h1>Senhas das contas</h1>
+            {aviso}
+            {linhas}
+            <p class="entrada__dica"><a href="/">Voltar</a></p>
+            """);
     }
 
     /// <summary>Cadastro de famílias novas só quando o dono do Fávoa liga a opção (publicação para várias casas).</summary>
@@ -358,6 +406,7 @@ public static class AcessoWeb
           {Erro(erro)}
           <button type="submit" class="botao botao--primario">Criar conta</button>
         </form>
+        <p class="entrada__dica">Seus dados ficam no computador de quem hospeda o Fávoa, que consegue abri-los. Use uma senha só sua e não registre nada que você não confiaria a essa pessoa.</p>
         <p class="entrada__dica"><a href="/entrar">Já tenho conta</a></p>
         """;
 
@@ -372,6 +421,7 @@ public static class AcessoWeb
           {Erro(erro)}
           <button type="submit" class="botao botao--primario">Entrar na casa</button>
         </form>
+        <p class="entrada__dica">Seus dados ficam no computador de quem hospeda o Fávoa, que consegue abri-los. Use uma senha só sua.</p>
         """;
 
     private static string ConviteInvalido() => """

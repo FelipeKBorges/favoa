@@ -100,6 +100,24 @@ public static class InfraestruturaExtensions
         await db.SaveChangesAsync();
         await CarregarMedidasAsync(db);
         await PrepararPessoasAsync(db);
+        await MoverOrcamentoParaFamiliaAsync(db);
+    }
+
+    /// <summary>
+    /// O orçamento já foi uma chave única do banco. Agora cada casa tem o seu: o valor antigo passa para a família mais antiga
+    /// (a que existia quando só havia uma). Sem família ainda, fica para depois do primeiro acesso.
+    /// </summary>
+    internal static async Task MoverOrcamentoParaFamiliaAsync(FavoaDbContext db)
+    {
+        var antigo = await db.Configuracoes.FindAsync([Configuracao.OrcamentoMensalCentavos]);
+        if (antigo is null) return;
+        var familia = await db.Familias.OrderBy(f => f.CriadoEm).Select(f => (Guid?)f.Id).FirstOrDefaultAsync();
+        if (familia is null) return;
+        var nova = AbrirBanco.ChaveDaFamilia(Configuracao.OrcamentoMensalCentavos, familia);
+        if (await db.Configuracoes.FindAsync([nova]) is null)
+            db.Configuracoes.Add(new Configuracao { Chave = nova, Valor = antigo.Valor });
+        db.Configuracoes.Remove(antigo);
+        await db.SaveChangesAsync();
     }
 
     /// <summary>

@@ -308,6 +308,11 @@ public sealed class FavoaDbContext(DbContextOptions<FavoaDbContext> options) : D
         b.Entity<Projeto>().HasQueryFilter(x => (FamiliaAtual == null || x.FamiliaId == FamiliaAtual)
             && (PessoaAtual == null || x.PessoaId == null || x.PessoaId == PessoaAtual));
 
+        // Filhos sem dono próprio herdam o filtro do pai: sem isso, quem soubesse o id alcançaria o item de outra casa.
+        b.Entity<ItemProjeto>().HasQueryFilter(x => Projetos.Any(p => p.Id == x.ProjetoId));
+        b.Entity<ItemFicha>().HasQueryFilter(x => Fichas.Any(f => f.Id == x.FichaId));
+        b.Entity<TarefaResponsavel>().HasQueryFilter(x => Tarefas.Any(t => t.Id == x.TarefaId));
+
         b.Entity<Projeto>(e =>
         {
             e.ToTable("prj_projeto");

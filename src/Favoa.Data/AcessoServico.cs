@@ -91,6 +91,7 @@ public sealed class AcessoServico(IDbContextFactory<FavoaDbContext> fabrica, Tim
         if (!await db.Configuracoes.AnyAsync(c => c.Chave == ChavePessoasMigradas, ct))
             db.Configuracoes.Add(new Configuracao { Chave = ChavePessoasMigradas, Valor = Agora.ToString("O") });
         await db.SaveChangesAsync(ct);
+        await InfraestruturaExtensions.MoverOrcamentoParaFamiliaAsync(db); // base antiga: o orçamento de antes vira o desta primeira casa
         return new(true, null, Sessao(usuario, pessoa.Nome));
     }
 
@@ -266,6 +267,38 @@ public sealed class AcessoServico(IDbContextFactory<FavoaDbContext> fabrica, Tim
         usuario.BloqueadoAte = null;
         await db.SaveChangesAsync(ct);
         return new(true, "Senha redefinida. Todos os aparelhos vão pedir a senha nova.");
+    }
+
+    public async Task<IReadOnlyList<ContaDoComputador>> ListarContasAsync(CancellationToken ct = default)
+    {
+        await using var db = await fabrica.CreateDbContextAsync(ct);
+        var contas = await (from u in db.Usuarios.AsNoTracking()
+                            join f in db.Familias.AsNoTracking() on u.FamiliaId equals f.Id
+                            join p in db.Pessoas.AsNoTracking() on u.PessoaId equals p.Id
+                            orderby f.CriadoEm, p.Ordem, u.CriadoEm
+                            select new ContaDoComputador(u.Id, f.Nome, p.Nome, u.Email, u.Dono, u.UltimoAcessoEm)).ToListAsync(ct);
+        return contas;
+    }
+
+    public async Task<ResultadoSenhaTemporaria> GerarSenhaTemporariaAsync(Guid usuarioId, CancellationToken ct = default)
+    {
+        await using var db = await fabrica.CreateDbContextAsync(ct);
+        var usuario = await db.Usuarios.FirstOrDefaultAsync(u => u.Id == usuarioId, ct);
+        if (usuario is null) return new(false, "Essa conta não existe mais.");
+
+        // 12 letras e números sem os que se confundem (0/o, 1/l/i), em grupos de 4: fácil de ditar por telefone.
+        const string alfabeto = "abcdefghjkmnpqrstuvwxyz23456789";
+        var letras = new char[12];
+        for (var i = 0; i < letras.Length; i++) letras[i] = alfabeto[System.Security.Cryptography.RandomNumberGenerator.GetInt32(alfabeto.Length)];
+        var senha = $"{new string(letras, 0, 4)}-{new string(letras, 4, 4)}-{new string(letras, 8, 4)}";
+
+        usuario.SenhaHash = SenhaSegura.Gerar(senha);
+        usuario.VersaoAcesso++;
+        usuario.FalhasSeguidas = 0;
+        usuario.Bloqueios = 0;
+        usuario.BloqueadoAte = null;
+        await db.SaveChangesAsync(ct);
+        return new(true, "Senha temporária gerada. Todos os aparelhos dessa conta vão pedir a senha nova.", senha);
     }
 
     public async Task<EstadoAcesso> ObterEstadoAsync(Guid? familiaId, CancellationToken ct = default)

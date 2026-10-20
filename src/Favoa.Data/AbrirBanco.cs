@@ -23,5 +23,8 @@ public static class AbrirBanco
     }
 
     /// <summary>Chave de configuração de uma pessoa (metas): "meta_kcal@{id}". Sem pessoa, a chave da casa.</summary>
+    /// <summary>Chave de configuração da casa (orçamento): "orcamento_mensal_centavos#{id}". Sem família (rotinas internas e testes), a chave simples.</summary>
+    public static string ChaveDaFamilia(string chave, Guid? familia) => familia is { } f ? $"{chave}#{f:N}" : chave;
+
     public static string ChaveDaPessoa(string chave, Guid? pessoa) => pessoa is { } p ? $"{chave}@{p:N}" : chave;
 }

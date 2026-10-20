@@ -223,7 +223,7 @@ public sealed partial class FavoaServico
 
         return new DadosHistorico
         {
-            OrcamentoMensalCentavos = await LerConfigLong(db, Configuracao.OrcamentoMensalCentavos, 0, ct),
+            OrcamentoMensalCentavos = await LerConfigLong(db, ChaveOrcamento(db), 0, ct),
             Despesas = despesas.Select(x => (x.Data, x.ValorCentavos)).ToList(),
             Tarefas = tarefas.Select(t => (DataLocal(t.CriadoEm), t.Prazo, t.ConcluidaEm)).ToList(),
             Habitos = habitos.Select(h => (h.Id, DataLocal(h.CriadoEm))).ToList(),

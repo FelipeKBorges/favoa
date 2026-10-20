@@ -201,6 +201,11 @@ public sealed record ConviteInfo(string PessoaNome, string FamiliaNome);
 
 public sealed record ResultadoConvite(bool Sucesso, string Mensagem, string? Codigo = null);
 
+/// <summary>Uma conta do computador, para quem administra o Fávoa (tela local de senhas): só nomes e e-mail, nunca dados da casa.</summary>
+public sealed record ContaDoComputador(Guid UsuarioId, string Casa, string Pessoa, string Email, bool Dono, DateTime? UltimoAcessoEm);
+
+public sealed record ResultadoSenhaTemporaria(bool Sucesso, string Mensagem, string? Senha = null);
+
 public sealed record DadosUsuario(Guid UsuarioId, string Email, bool Dono, string FamiliaNome);
 
 /// <summary>Famílias, logins e convites. Fica fora do filtro por família de propósito: é ele que decide quem entra em qual.</summary>
@@ -242,6 +247,12 @@ public interface IAcessoServico
 
     /// <summary>Redefinição feita por quem tem acesso à máquina (linha de comando): o app não manda e-mail ainda.</summary>
     Task<ResultadoRegistro> RedefinirSenhaAsync(string email, string senhaNova, CancellationToken ct = default);
+
+    /// <summary>Todas as contas deste computador (de todas as casas). Só a tela local de quem administra o Fávoa usa.</summary>
+    Task<IReadOnlyList<ContaDoComputador>> ListarContasAsync(CancellationToken ct = default);
+
+    /// <summary>Gera uma senha temporária para a conta e derruba os aparelhos dela. A pessoa troca em Seus dados depois de entrar.</summary>
+    Task<ResultadoSenhaTemporaria> GerarSenhaTemporariaAsync(Guid usuarioId, CancellationToken ct = default);
 
     Task<EstadoAcesso> ObterEstadoAsync(Guid? familiaId, CancellationToken ct = default);
 
