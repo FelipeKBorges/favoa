@@ -361,6 +361,15 @@ public sealed class AcessoServicoTests : IAsyncLifetime
 
 public sealed class RegraLocalTests
 {
+    [Theory]
+    [InlineData("127.0.0.1", "https", true)]
+    [InlineData("::1", "HTTPS", true)]
+    [InlineData("127.0.0.1", "http", false)]
+    [InlineData("127.0.0.1", null, false)]
+    [InlineData("100.64.0.5", "https", false)] // de fora do PC, o cabeçalho poderia ser forjado
+    public void Https_encaminhado_so_vale_vindo_do_proprio_pc(string remoto, string? proto, bool esperado) =>
+        Assert.Equal(esperado, RegraLocal.VeioPorHttps(System.Net.IPAddress.Parse(remoto), proto));
+
     private static readonly System.Net.IPAddress Loop = System.Net.IPAddress.Loopback;
     private static readonly System.Net.IPAddress Pc = System.Net.IPAddress.Parse("192.168.0.15");
     private static readonly System.Net.IPAddress Celular = System.Net.IPAddress.Parse("192.168.0.42");

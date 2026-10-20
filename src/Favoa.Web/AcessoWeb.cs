@@ -78,6 +78,14 @@ public static class AcessoWeb
 
     public static WebApplication UseFavoaAcesso(this WebApplication app)
     {
+        // Atrás do Tailscale com HTTPS, o app enxerga HTTP: marca o pedido como HTTPS para o cookie sair com "Secure".
+        // Os cabeçalhos de proxy ficam como vieram (a regra de "é o próprio PC?" depende deles).
+        app.Use(async (ctx, proximo) =>
+        {
+            if (RegraLocal.VeioPorHttps(ctx.Connection.RemoteIpAddress, ctx.Request.Headers["X-Forwarded-Proto"].ToString()))
+                ctx.Request.Scheme = "https";
+            await proximo();
+        });
         app.UseAuthentication();
         app.Use(async (ctx, proximo) =>
         {

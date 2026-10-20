@@ -6,12 +6,15 @@
     powershell -ExecutionPolicy Bypass -File .\ferramentas\instalar-inicializacao.ps1
     powershell -ExecutionPolicy Bypass -File .\ferramentas\instalar-inicializacao.ps1 -ComTailscale
     powershell -ExecutionPolicy Bypass -File .\ferramentas\instalar-inicializacao.ps1 -Remover
+  Para outra família: -ComTailscale -SoPeloTailscale -CadastroAberto (veja docs\COMPARTILHAR.md).
 
   Para atualizar depois, use o ícone "Atualizar Fávoa" (criado por este script) ou ferramentas\atualizar.ps1.
 #>
 param(
     [switch]$ComTailscale,
     [switch]$Remover,
+    [switch]$CadastroAberto,   # deixa outras famílias criarem conta em /criar-conta (rode de novo sem a opção para fechar)
+    [switch]$SoPeloTailscale,  # escuta só em localhost: o acesso de fora passa pelo HTTPS do Tailscale, nunca por HTTP direto
     [int]$Porta = 5080
 )
 $ErrorActionPreference = 'Stop'
@@ -70,7 +73,9 @@ $dados = $base
 
 function Registrar-Tarefa([string]$modo) {
     # A pasta de dados vai explícita: em segundo plano o Windows pode não carregar o perfil do mesmo jeito.
-    $comando = "`"`"$dotnet`" `"$dll`" --urls http://*:$Porta --Favoa:PastaDados=`"$dados`" > `"$log`" 2>&1`""
+    $escuta = if ($SoPeloTailscale) { "http://localhost:$Porta" } else { "http://*:$Porta" }
+    $extra = if ($CadastroAberto) { ' --Favoa:CadastroAberto=true' } else { '' }
+    $comando = "`"`"$dotnet`" `"$dll`" --urls $escuta --Favoa:PastaDados=`"$dados`"$extra > `"$log`" 2>&1`""
     $acao = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument "/c $comando" -WorkingDirectory $appDir
     $ajustes = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable `
         -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -MultipleInstances IgnoreNew

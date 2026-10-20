@@ -287,6 +287,17 @@ public static class RegraLocal
         return pcPeloIpDaRedeSemPin && remoto.Equals(local);
     }
 
+    /// <summary>
+    /// Atrás do Tailscale (<c>tailscale serve</c>) o app recebe HTTP puro do próprio PC, com <c>X-Forwarded-Proto: https</c>.
+    /// Só nesse caso (vindo do loopback) vale o cabeçalho; de outra origem ele poderia ser forjado.
+    /// </summary>
+    public static bool VeioPorHttps(System.Net.IPAddress? remoto, string? protoEncaminhado)
+    {
+        if (remoto is { IsIPv4MappedToIPv6: true }) remoto = remoto.MapToIPv4();
+        return remoto is not null && System.Net.IPAddress.IsLoopback(remoto)
+            && string.Equals(protoEncaminhado?.Split(',')[0].Trim(), "https", StringComparison.OrdinalIgnoreCase);
+    }
+
     private static string SemPorta(string? host)
     {
         if (string.IsNullOrEmpty(host)) return "";
