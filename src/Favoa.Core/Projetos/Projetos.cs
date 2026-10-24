@@ -28,8 +28,10 @@ public sealed class Projeto : Favoa.Core.Pessoas.IDaFamilia
 }
 
 /// <summary>Item de checklist (marca feito), marco (data no calendário) ou nota (texto e links).</summary>
-public sealed class ItemProjeto
+public sealed class ItemProjeto : Favoa.Core.Pessoas.IDaFamilia
 {
+    /// <summary>Casa (tenant) do registro. O banco filtra e preenche sozinho com a família atual.</summary>
+    public Guid? FamiliaId { get; set; }
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid ProjetoId { get; set; }
     public TipoItemProjeto Tipo { get; set; }

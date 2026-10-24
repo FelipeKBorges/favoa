@@ -25,14 +25,18 @@ public sealed class Tarefa : Favoa.Core.Pessoas.IDaFamilia
 }
 
 /// <summary>Uma pessoa responsável por uma tarefa. Chave (TarefaId, PessoaId).</summary>
-public sealed class TarefaResponsavel
+public sealed class TarefaResponsavel : Favoa.Core.Pessoas.IDaFamilia
 {
+    /// <summary>Casa (tenant) do registro. O banco filtra e preenche sozinho com a família atual.</summary>
+    public Guid? FamiliaId { get; set; }
     public Guid TarefaId { get; set; }
     public Guid PessoaId { get; set; }
 }
 
-public sealed class Habito : Favoa.Core.Pessoas.IComDono
+public sealed class Habito : Favoa.Core.Pessoas.IComDono, Favoa.Core.Pessoas.IDaFamilia
 {
+    /// <summary>Casa (tenant) do registro. O banco filtra e preenche sozinho com a família atual.</summary>
+    public Guid? FamiliaId { get; set; }
     public Guid Id { get; set; } = Guid.NewGuid();
     /// <summary>Dono do registro (pessoa da casa).</summary>
     public Guid? PessoaId { get; set; }
@@ -42,8 +46,10 @@ public sealed class Habito : Favoa.Core.Pessoas.IComDono
 }
 
 /// <summary>Um check de hábito em um dia. Único por (HabitoId, Data).</summary>
-public sealed class RegistroHabito
+public sealed class RegistroHabito : Favoa.Core.Pessoas.IDaFamilia
 {
+    /// <summary>Casa (tenant) do registro. O banco filtra e preenche sozinho com a família atual.</summary>
+    public Guid? FamiliaId { get; set; }
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid HabitoId { get; set; }
     public DateOnly Data { get; set; }
@@ -52,8 +58,10 @@ public sealed class RegistroHabito
     public Habito? Habito { get; set; }
 }
 
-public sealed class RegistroAgua : Favoa.Core.Pessoas.IComDono
+public sealed class RegistroAgua : Favoa.Core.Pessoas.IComDono, Favoa.Core.Pessoas.IDaFamilia
 {
+    /// <summary>Casa (tenant) do registro. O banco filtra e preenche sozinho com a família atual.</summary>
+    public Guid? FamiliaId { get; set; }
     public Guid Id { get; set; } = Guid.NewGuid();
     /// <summary>Dono do registro (pessoa da casa).</summary>
     public Guid? PessoaId { get; set; }

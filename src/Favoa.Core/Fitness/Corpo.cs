@@ -3,8 +3,10 @@ using Favoa.Core.Captura;
 namespace Favoa.Core.Fitness;
 
 /// <summary>Uma medida do corpo (cintura, quadril...) em centímetros. Uma por tipo e dia (registrar de novo substitui).</summary>
-public sealed class MedidaCorporal : Favoa.Core.Pessoas.IComDono
+public sealed class MedidaCorporal : Favoa.Core.Pessoas.IComDono, Favoa.Core.Pessoas.IDaFamilia
 {
+    /// <summary>Casa (tenant) do registro. O banco filtra e preenche sozinho com a família atual.</summary>
+    public Guid? FamiliaId { get; set; }
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid? PessoaId { get; set; }
     public DateOnly Data { get; set; }

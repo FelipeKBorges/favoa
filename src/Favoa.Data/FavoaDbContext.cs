@@ -292,26 +292,26 @@ public sealed class FavoaDbContext(DbContextOptions<FavoaDbContext> options) : D
 
         // Sem chave estrangeira para cfg_pessoa de propósito: no SQLite, criar FK em tabela existente
         // obriga a recriar a tabela. A pessoa é preenchida pelo contexto (SaveChanges) e filtrada aqui.
-        b.Entity<Habito>().HasQueryFilter(x => PessoaAtual == null || x.PessoaId == PessoaAtual);
-        b.Entity<RegistroHabito>().HasQueryFilter(x => PessoaAtual == null || x.Habito!.PessoaId == PessoaAtual);
-        b.Entity<RegistroAgua>().HasQueryFilter(x => PessoaAtual == null || x.PessoaId == PessoaAtual);
-        b.Entity<Lembrete>().HasQueryFilter(x => PessoaAtual == null || x.PessoaId == PessoaAtual);
-        b.Entity<AssinaturaPush>().HasQueryFilter(x => PessoaAtual == null || x.PessoaId == PessoaAtual);
-        b.Entity<FichaTreino>().HasQueryFilter(x => PessoaAtual == null || x.PessoaId == PessoaAtual);
-        b.Entity<SessaoTreino>().HasQueryFilter(x => PessoaAtual == null || x.PessoaId == PessoaAtual);
-        b.Entity<ExercicioRealizado>().HasQueryFilter(x => PessoaAtual == null || x.Sessao!.PessoaId == PessoaAtual);
-        b.Entity<ItemPlano>().HasQueryFilter(x => PessoaAtual == null || x.PessoaId == PessoaAtual);
-        b.Entity<Consumo>().HasQueryFilter(x => PessoaAtual == null || x.PessoaId == PessoaAtual);
-        b.Entity<RegistroPeso>().HasQueryFilter(x => PessoaAtual == null || x.PessoaId == PessoaAtual);
-        b.Entity<MedidaCorporal>().HasQueryFilter(x => PessoaAtual == null || x.PessoaId == PessoaAtual);
+        b.Entity<Habito>().HasQueryFilter(x => (FamiliaAtual == null || x.FamiliaId == FamiliaAtual) && (PessoaAtual == null || x.PessoaId == PessoaAtual));
+        b.Entity<RegistroHabito>().HasQueryFilter(x => (FamiliaAtual == null || x.FamiliaId == FamiliaAtual) && (PessoaAtual == null || x.Habito!.PessoaId == PessoaAtual));
+        b.Entity<RegistroAgua>().HasQueryFilter(x => (FamiliaAtual == null || x.FamiliaId == FamiliaAtual) && (PessoaAtual == null || x.PessoaId == PessoaAtual));
+        b.Entity<Lembrete>().HasQueryFilter(x => (FamiliaAtual == null || x.FamiliaId == FamiliaAtual) && (PessoaAtual == null || x.PessoaId == PessoaAtual));
+        b.Entity<AssinaturaPush>().HasQueryFilter(x => (FamiliaAtual == null || x.FamiliaId == FamiliaAtual) && (PessoaAtual == null || x.PessoaId == PessoaAtual));
+        b.Entity<FichaTreino>().HasQueryFilter(x => (FamiliaAtual == null || x.FamiliaId == FamiliaAtual) && (PessoaAtual == null || x.PessoaId == PessoaAtual));
+        b.Entity<SessaoTreino>().HasQueryFilter(x => (FamiliaAtual == null || x.FamiliaId == FamiliaAtual) && (PessoaAtual == null || x.PessoaId == PessoaAtual));
+        b.Entity<ExercicioRealizado>().HasQueryFilter(x => (FamiliaAtual == null || x.FamiliaId == FamiliaAtual) && (PessoaAtual == null || x.Sessao!.PessoaId == PessoaAtual));
+        b.Entity<ItemPlano>().HasQueryFilter(x => (FamiliaAtual == null || x.FamiliaId == FamiliaAtual) && (PessoaAtual == null || x.PessoaId == PessoaAtual));
+        b.Entity<Consumo>().HasQueryFilter(x => (FamiliaAtual == null || x.FamiliaId == FamiliaAtual) && (PessoaAtual == null || x.PessoaId == PessoaAtual));
+        b.Entity<RegistroPeso>().HasQueryFilter(x => (FamiliaAtual == null || x.FamiliaId == FamiliaAtual) && (PessoaAtual == null || x.PessoaId == PessoaAtual));
+        b.Entity<MedidaCorporal>().HasQueryFilter(x => (FamiliaAtual == null || x.FamiliaId == FamiliaAtual) && (PessoaAtual == null || x.PessoaId == PessoaAtual));
         // Projeto: os da casa (sem dono) para todos, os pessoais só para o dono.
         b.Entity<Projeto>().HasQueryFilter(x => (FamiliaAtual == null || x.FamiliaId == FamiliaAtual)
             && (PessoaAtual == null || x.PessoaId == null || x.PessoaId == PessoaAtual));
 
-        // Filhos sem dono próprio herdam o filtro do pai: sem isso, quem soubesse o id alcançaria o item de outra casa.
-        b.Entity<ItemProjeto>().HasQueryFilter(x => Projetos.Any(p => p.Id == x.ProjetoId));
-        b.Entity<ItemFicha>().HasQueryFilter(x => Fichas.Any(f => f.Id == x.FichaId));
-        b.Entity<TarefaResponsavel>().HasQueryFilter(x => Tarefas.Any(t => t.Id == x.TarefaId));
+        // Filhos (item de projeto, de ficha e responsável de tarefa) levam a própria casa: o filtro é o mesmo de todas as tabelas.
+        b.Entity<ItemProjeto>().HasQueryFilter(x => FamiliaAtual == null || x.FamiliaId == FamiliaAtual);
+        b.Entity<ItemFicha>().HasQueryFilter(x => FamiliaAtual == null || x.FamiliaId == FamiliaAtual);
+        b.Entity<TarefaResponsavel>().HasQueryFilter(x => FamiliaAtual == null || x.FamiliaId == FamiliaAtual);
 
         b.Entity<Projeto>(e =>
         {
@@ -330,7 +330,10 @@ public sealed class FavoaDbContext(DbContextOptions<FavoaDbContext> options) : D
                      typeof(SessaoTreino), typeof(ItemPlano), typeof(Consumo), typeof(Lancamento) })
             b.Entity(tipo).HasIndex(nameof(IComDono.PessoaId));
         foreach (var tipo in new[] { typeof(Pessoa), typeof(Conta), typeof(Categoria), typeof(Lancamento), typeof(Recorrencia), typeof(Tarefa),
-                     typeof(Projeto), typeof(Exercicio), typeof(Alimento) })
+                     typeof(Projeto), typeof(Exercicio), typeof(Alimento),
+                     typeof(Habito), typeof(RegistroHabito), typeof(RegistroAgua), typeof(Lembrete), typeof(AssinaturaPush), typeof(FichaTreino),
+                     typeof(ItemFicha), typeof(SessaoTreino), typeof(ExercicioRealizado), typeof(ItemPlano), typeof(Consumo), typeof(RegistroPeso),
+                     typeof(MedidaCorporal), typeof(ItemProjeto), typeof(TarefaResponsavel) })
             b.Entity(tipo).HasIndex(nameof(IDaFamilia.FamiliaId));
     }
 

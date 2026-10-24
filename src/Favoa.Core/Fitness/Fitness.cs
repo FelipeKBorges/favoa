@@ -32,8 +32,10 @@ public sealed class Exercicio : Favoa.Core.Pessoas.IDaFamilia
 }
 
 /// <summary>Treino A, B, C... com os exercícios e as metas de cada um.</summary>
-public sealed class FichaTreino : Favoa.Core.Pessoas.IComDono
+public sealed class FichaTreino : Favoa.Core.Pessoas.IComDono, Favoa.Core.Pessoas.IDaFamilia
 {
+    /// <summary>Casa (tenant) do registro. O banco filtra e preenche sozinho com a família atual.</summary>
+    public Guid? FamiliaId { get; set; }
     public Guid Id { get; set; } = Guid.NewGuid();
     /// <summary>Dono do registro (pessoa da casa).</summary>
     public Guid? PessoaId { get; set; }
@@ -44,8 +46,10 @@ public sealed class FichaTreino : Favoa.Core.Pessoas.IComDono
     public List<ItemFicha> Itens { get; set; } = [];
 }
 
-public sealed class ItemFicha
+public sealed class ItemFicha : Favoa.Core.Pessoas.IDaFamilia
 {
+    /// <summary>Casa (tenant) do registro. O banco filtra e preenche sozinho com a família atual.</summary>
+    public Guid? FamiliaId { get; set; }
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid FichaId { get; set; }
     public Guid ExercicioId { get; set; }
@@ -58,8 +62,10 @@ public sealed class ItemFicha
 }
 
 /// <summary>Um treino feito num dia.</summary>
-public sealed class SessaoTreino : Favoa.Core.Pessoas.IComDono
+public sealed class SessaoTreino : Favoa.Core.Pessoas.IComDono, Favoa.Core.Pessoas.IDaFamilia
 {
+    /// <summary>Casa (tenant) do registro. O banco filtra e preenche sozinho com a família atual.</summary>
+    public Guid? FamiliaId { get; set; }
     public Guid Id { get; set; } = Guid.NewGuid();
     /// <summary>Dono do registro (pessoa da casa).</summary>
     public Guid? PessoaId { get; set; }
@@ -75,8 +81,10 @@ public sealed class SessaoTreino : Favoa.Core.Pessoas.IComDono
 }
 
 /// <summary>Um exercício dentro de uma sessão. Força usa séries/repetições/carga; cardio, minutos/distância.</summary>
-public sealed class ExercicioRealizado
+public sealed class ExercicioRealizado : Favoa.Core.Pessoas.IDaFamilia
 {
+    /// <summary>Casa (tenant) do registro. O banco filtra e preenche sozinho com a família atual.</summary>
+    public Guid? FamiliaId { get; set; }
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid SessaoId { get; set; }
     public Guid ExercicioId { get; set; }
@@ -197,8 +205,10 @@ public static class Refeicoes
 }
 
 /// <summary>Um item do plano alimentar: em tal refeição, tantos gramas de tal alimento.</summary>
-public sealed class ItemPlano : Favoa.Core.Pessoas.IComDono
+public sealed class ItemPlano : Favoa.Core.Pessoas.IComDono, Favoa.Core.Pessoas.IDaFamilia
 {
+    /// <summary>Casa (tenant) do registro. O banco filtra e preenche sozinho com a família atual.</summary>
+    public Guid? FamiliaId { get; set; }
     public Guid Id { get; set; } = Guid.NewGuid();
     /// <summary>Dono do registro (pessoa da casa).</summary>
     public Guid? PessoaId { get; set; }
@@ -214,8 +224,10 @@ public sealed class ItemPlano : Favoa.Core.Pessoas.IComDono
 }
 
 /// <summary>O que foi comido num dia.</summary>
-public sealed class Consumo : Favoa.Core.Pessoas.IComDono
+public sealed class Consumo : Favoa.Core.Pessoas.IComDono, Favoa.Core.Pessoas.IDaFamilia
 {
+    /// <summary>Casa (tenant) do registro. O banco filtra e preenche sozinho com a família atual.</summary>
+    public Guid? FamiliaId { get; set; }
     public Guid Id { get; set; } = Guid.NewGuid();
     /// <summary>Dono do registro (pessoa da casa).</summary>
     public Guid? PessoaId { get; set; }
@@ -238,8 +250,10 @@ public sealed class Consumo : Favoa.Core.Pessoas.IComDono
 // =====================================================================
 
 /// <summary>Um peso por dia (registrar de novo no mesmo dia substitui).</summary>
-public sealed class RegistroPeso : Favoa.Core.Pessoas.IComDono
+public sealed class RegistroPeso : Favoa.Core.Pessoas.IComDono, Favoa.Core.Pessoas.IDaFamilia
 {
+    /// <summary>Casa (tenant) do registro. O banco filtra e preenche sozinho com a família atual.</summary>
+    public Guid? FamiliaId { get; set; }
     public Guid Id { get; set; } = Guid.NewGuid();
     /// <summary>Dono do registro (pessoa da casa).</summary>
     public Guid? PessoaId { get; set; }

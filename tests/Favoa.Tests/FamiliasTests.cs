@@ -218,6 +218,33 @@ public sealed class MigracaoFamiliasTests
     }
 
     [Fact]
+    public async Task Tabelas_pessoais_e_filhas_herdam_a_casa_na_migracao_de_hoje()
+    {
+        await using var conexao = new SqliteConnection("Data Source=:memory:");
+        await conexao.OpenAsync();
+        await using var db = new FavoaDbContext(new DbContextOptionsBuilder<FavoaDbContext>().UseSqlite(conexao).Options);
+        var migrator = Microsoft.EntityFrameworkCore.Infrastructure.AccessorExtensions.GetService<Microsoft.EntityFrameworkCore.Migrations.IMigrator>(db)!;
+        await migrator.MigrateAsync(Antes);
+        const string agora = "2026-10-10 12:00:00";
+        string[] sql =
+        [
+            $"INSERT INTO cfg_pessoa (Id, Nome, Cor, Ordem, VersaoAcesso, CriadoEm) VALUES ('11111111-1111-1111-1111-111111111111', 'Davi', '#F2A93B', 0, 0, '{agora}')",
+            $"INSERT INTO rot_habito (Id, Nome, Ativo, PessoaId, CriadoEm) VALUES ('AAAAAAAA-0000-0000-0000-000000000001', 'Ler', 1, '11111111-1111-1111-1111-111111111111', '{agora}')",
+            $"INSERT INTO rot_habito (Id, Nome, Ativo, PessoaId, CriadoEm) VALUES ('AAAAAAAA-0000-0000-0000-000000000002', 'Sem dono', 1, NULL, '{agora}')",
+            $"INSERT INTO rot_habito_registro (Id, HabitoId, Data, CriadoEm) VALUES ('AAAAAAAA-0000-0000-0000-000000000003', 'AAAAAAAA-0000-0000-0000-000000000001', '2026-10-10', '{agora}')",
+        ];
+        foreach (var c in sql) await db.Database.ExecuteSqlRawAsync(c);
+        await migrator.MigrateAsync("20261019100000_PorcoesDosAlimentos"); // cria a primeira família
+        await migrator.MigrateAsync(); // FamiliaId em todas as tabelas
+
+        var familia = await db.Familias.SingleAsync();
+        var habitos = await db.Habitos.IgnoreQueryFilters().ToListAsync();
+        Assert.Equal(2, habitos.Count);
+        Assert.All(habitos, h => Assert.Equal(familia.Id, h.FamiliaId)); // por pessoa e, sem dono, pela casa mais antiga
+        Assert.Equal(familia.Id, (await db.RegistrosHabito.IgnoreQueryFilters().SingleAsync()).FamiliaId);
+    }
+
+    [Fact]
     public async Task Base_nova_nao_ganha_familia_na_migracao()
     {
         await using var conexao = new SqliteConnection("Data Source=:memory:");

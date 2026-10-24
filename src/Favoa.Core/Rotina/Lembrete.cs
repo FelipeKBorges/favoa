@@ -24,8 +24,10 @@ public enum TipoLembrete
 }
 
 /// <summary>Aviso no celular (e no navegador do PC) em uma hora e dias da semana.</summary>
-public sealed class Lembrete : Favoa.Core.Pessoas.IComDono
+public sealed class Lembrete : Favoa.Core.Pessoas.IComDono, Favoa.Core.Pessoas.IDaFamilia
 {
+    /// <summary>Casa (tenant) do registro. O banco filtra e preenche sozinho com a família atual.</summary>
+    public Guid? FamiliaId { get; set; }
     public Guid Id { get; set; } = Guid.NewGuid();
     /// <summary>Dono do registro (pessoa da casa).</summary>
     public Guid? PessoaId { get; set; }
@@ -46,8 +48,10 @@ public sealed class Lembrete : Favoa.Core.Pessoas.IComDono
 }
 
 /// <summary>Um aparelho que aceitou receber notificações (Web Push). Fica só neste computador.</summary>
-public sealed class AssinaturaPush : Favoa.Core.Pessoas.IComDono
+public sealed class AssinaturaPush : Favoa.Core.Pessoas.IComDono, Favoa.Core.Pessoas.IDaFamilia
 {
+    /// <summary>Casa (tenant) do registro. O banco filtra e preenche sozinho com a família atual.</summary>
+    public Guid? FamiliaId { get; set; }
     public Guid Id { get; set; } = Guid.NewGuid();
     /// <summary>Dono do registro (pessoa da casa).</summary>
     public Guid? PessoaId { get; set; }

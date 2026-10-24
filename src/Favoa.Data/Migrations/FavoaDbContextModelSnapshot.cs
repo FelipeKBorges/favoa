@@ -453,7 +453,12 @@ namespace Favoa.Data.Migrations
                         .HasMaxLength(60)
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid?>("FamiliaId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("FamiliaId");
 
                     b.HasIndex("AlimentoId");
 
@@ -538,7 +543,12 @@ namespace Favoa.Data.Migrations
                     b.Property<Guid>("SessaoId")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid?>("FamiliaId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("FamiliaId");
 
                     b.HasIndex("ExercicioId");
 
@@ -570,7 +580,12 @@ namespace Favoa.Data.Migrations
                     b.Property<Guid?>("PessoaId")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid?>("FamiliaId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("FamiliaId");
 
                     b.HasIndex("PessoaId");
 
@@ -604,7 +619,12 @@ namespace Favoa.Data.Migrations
                     b.Property<int?>("Series")
                         .HasColumnType("INTEGER");
 
+                    b.Property<Guid?>("FamiliaId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("FamiliaId");
 
                     b.HasIndex("ExercicioId");
 
@@ -641,7 +661,12 @@ namespace Favoa.Data.Migrations
                         .HasMaxLength(60)
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid?>("FamiliaId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("FamiliaId");
 
                     b.HasIndex("AlimentoId");
 
@@ -675,7 +700,12 @@ namespace Favoa.Data.Migrations
                         .HasMaxLength(40)
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid?>("FamiliaId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("FamiliaId");
 
                     b.HasIndex("PessoaId", "Tipo", "Data")
                         .IsUnique();
@@ -701,7 +731,12 @@ namespace Favoa.Data.Migrations
                     b.Property<Guid?>("PessoaId")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid?>("FamiliaId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("FamiliaId");
 
                     b.HasIndex("PessoaId", "Data")
                         .IsUnique();
@@ -738,7 +773,12 @@ namespace Favoa.Data.Migrations
                     b.Property<Guid?>("PessoaId")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid?>("FamiliaId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("FamiliaId");
 
                     b.HasIndex("Data");
 
@@ -820,7 +860,12 @@ namespace Favoa.Data.Migrations
                     b.Property<int>("Tipo")
                         .HasColumnType("INTEGER");
 
+                    b.Property<Guid?>("FamiliaId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("FamiliaId");
 
                     b.HasIndex("ProjetoId");
 
@@ -908,7 +953,12 @@ namespace Favoa.Data.Migrations
                     b.Property<Guid?>("PessoaId")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid?>("FamiliaId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("FamiliaId");
 
                     b.HasIndex("Endpoint")
                         .IsUnique();
@@ -953,7 +1003,12 @@ namespace Favoa.Data.Migrations
                     b.Property<Guid?>("PessoaId")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid?>("FamiliaId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("FamiliaId");
 
                     b.HasIndex("PessoaId");
 
@@ -1002,7 +1057,12 @@ namespace Favoa.Data.Migrations
                         .HasMaxLength(300)
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid?>("FamiliaId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("FamiliaId");
 
                     b.HasIndex("PessoaId");
 
@@ -1027,7 +1087,12 @@ namespace Favoa.Data.Migrations
                     b.Property<Guid?>("PessoaId")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid?>("FamiliaId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("FamiliaId");
 
                     b.HasIndex("Data");
 
@@ -1051,7 +1116,12 @@ namespace Favoa.Data.Migrations
                     b.Property<Guid>("HabitoId")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid?>("FamiliaId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("FamiliaId");
 
                     b.HasIndex("HabitoId", "Data")
                         .IsUnique();
@@ -1113,7 +1183,12 @@ namespace Favoa.Data.Migrations
                     b.Property<Guid>("PessoaId")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid?>("FamiliaId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("TarefaId", "PessoaId");
+
+                    b.HasIndex("FamiliaId");
 
                     b.HasIndex("PessoaId");
 

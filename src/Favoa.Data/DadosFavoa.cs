@@ -1,3 +1,4 @@
+using Favoa.Core.Pessoas;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
@@ -460,6 +461,10 @@ public sealed class DadosFavoa(IDbContextFactory<FavoaDbContext> fabrica, Opcoes
                 db.Pesos.AddRange((pacote.Pesos ?? []).Select(x => new RegistroPeso { Id = x.Id, Data = x.Data, Kg = x.Kg, CriadoEm = x.CriadoEm, PessoaId = Dono(x.PessoaId) }));
             }
 
+            // Tudo o que veio no arquivo é da casa que está importando (menos o catálogo de alimentos, que é de todas).
+            foreach (var e in db.ChangeTracker.Entries<IDaFamilia>())
+                if (e.State == EntityState.Added && e.Entity.FamiliaId is null && e.Entity is not (Alimento or PorcaoAlimento))
+                    e.Entity.FamiliaId = familiaId;
             await db.SaveChangesAsync(ct);
             // O catálogo de medidas do IBGE vai junto com os alimentos apagados; volta para os alimentos importados.
             if (temFitness) await InfraestruturaExtensions.CarregarMedidasAsync(db);

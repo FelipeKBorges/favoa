@@ -54,6 +54,40 @@ public sealed class IsolamentoTests : IAsyncLifetime
         Assert.True(sem.Count == 0, "Entidades sem filtro de tenant (adicione o filtro ou, se for de propósito, a lista SemFiltro): " + string.Join(", ", sem));
     }
 
+    [Fact]
+    public async Task Toda_tabela_de_dados_tem_FamiliaId_e_indice()
+    {
+        await using var db = await _fabrica.CreateDbContextAsync();
+        var sem = db.Model.GetEntityTypes()
+            .Where(t => !t.IsOwned() && t.ClrType.Name != "HistoryRow" && !SemFiltro.Contains(t.ClrType.Name))
+            .Where(t => t.FindProperty("FamiliaId") is null
+                        || (t.ClrType.Name != "Pessoa" && !t.GetIndexes().Any(i => i.Properties.Count == 1 && i.Properties[0].Name == "FamiliaId")))
+            .Select(t => t.ClrType.Name).OrderBy(n => n).ToList();
+        Assert.True(sem.Count == 0, "Entidades sem FamiliaId indexado: " + string.Join(", ", sem));
+    }
+
+    [Fact]
+    public async Task Depois_dos_fluxos_normais_nenhum_dado_da_casa_fica_sem_FamiliaId_e_toda_chave_tem_dono()
+    {
+        await PopularAna();
+        await using var db = await _fabrica.CreateDbContextAsync();
+        var nulos = new List<string>();
+        foreach (var t in db.Model.GetEntityTypes().Where(t => typeof(IDaFamilia).IsAssignableFrom(t.ClrType) && t.ClrType.Name != "Alimento" && t.ClrType.Name != "PorcaoAlimento"))
+        {
+            var n = (int)typeof(IsolamentoTests).GetMethod(nameof(ContarSemFamilia), System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
+                .MakeGenericMethod(t.ClrType).Invoke(null, [db])!;
+            if (n > 0) nulos.Add($"{t.ClrType.Name}={n}");
+        }
+        Assert.True(nulos.Count == 0, "Linhas sem FamiliaId: " + string.Join(", ", nulos));
+
+        var chaves = await db.Configuracoes.Select(c => c.Chave).ToListAsync();
+        var soltas = chaves.Where(c => !c.Contains('#') && !c.StartsWith("acesso_") && !c.StartsWith("push_")).ToList();
+        Assert.True(soltas.Count == 0, "Chaves de configuração sem dono (casa/pessoa): " + string.Join(", ", soltas));
+    }
+
+    private static int ContarSemFamilia<T>(FavoaDbContext db) where T : class, IDaFamilia =>
+        db.Set<T>().IgnoreQueryFilters().Count(x => x.FamiliaId == null);
+
     private async Task PopularAna()
     {
         await using var db = await Abrir(_ana);
