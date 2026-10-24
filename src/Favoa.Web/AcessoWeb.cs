@@ -26,7 +26,7 @@ public static class AcessoWeb
 
     // O que as telas de entrada precisam para aparecer bonitas, sem abrir o resto.
     private static readonly string[] LivresSemLogin =
-        ["/entrar", "/sair", "/primeiro-acesso", "/criar-conta", "/convite/", "/app.css", "/favicon.svg", "/fonts/", "/icones/", "/manifest.webmanifest", "/sw.js", "/offline.html"];
+        ["/entrar", "/sair", "/primeiro-acesso", "/criar-conta", "/recuperar", "/convite/", "/app.css", "/favicon.svg", "/fonts/", "/icones/", "/manifest.webmanifest", "/sw.js", "/offline.html"];
 
     public static IServiceCollection AddFavoaAcesso(this IServiceCollection services, OpcoesFavoa opcoes)
     {
@@ -87,6 +87,11 @@ public static class AcessoWeb
                 ctx.Request.Scheme = "https";
             await proximo();
         });
+        app.Use(async (ctx, proximo) =>
+        {
+            AplicarCabecalhosDeSeguranca(ctx.Response.Headers, ctx.Request.IsHttps);
+            await proximo();
+        });
         app.UseAuthentication();
         app.Use(async (ctx, proximo) =>
         {
@@ -110,6 +115,26 @@ public static class AcessoWeb
             ctx.Response.Redirect("/entrar?volta=" + Uri.EscapeDataString(caminho + ctx.Request.QueryString));
         });
         return app;
+    }
+
+    /// <summary>
+    /// Política de conteúdo e afins. Scripts e estilos inline continuam permitidos porque o Blazor e o tema inicial precisam deles;
+    /// o ganho está em proibir quadros (clickjacking), plugins, base trocada, formulários para outro site e qualquer recurso de fora.
+    /// </summary>
+    internal const string PoliticaDeConteudo =
+        "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; " +
+        "font-src 'self' data:; connect-src 'self' ws: wss:; worker-src 'self'; manifest-src 'self'; object-src 'none'; " +
+        "base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
+
+    internal static void AplicarCabecalhosDeSeguranca(IHeaderDictionary cabecalhos, bool https)
+    {
+        cabecalhos["Content-Security-Policy"] = PoliticaDeConteudo;
+        cabecalhos["X-Content-Type-Options"] = "nosniff";
+        cabecalhos["X-Frame-Options"] = "DENY";
+        cabecalhos["Referrer-Policy"] = "no-referrer";
+        cabecalhos["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), payment=(), usb=()";
+        cabecalhos["Cross-Origin-Opener-Policy"] = "same-origin";
+        if (https) cabecalhos["Strict-Transport-Security"] = "max-age=15552000"; // 6 meses, sem subdomínios
     }
 
     private static bool EhLivre(string caminho) =>
@@ -220,6 +245,26 @@ public static class AcessoWeb
             if (!r.Sucesso || r.Sessao is not { } sessao) return Pagina("Criar conta", FormularioNovaFamilia(r.Mensagem, dados));
             await EntrarAsync(ctx, sessao);
             return Results.Redirect("/");
+        }).DisableAntiforgery();
+
+        // ---------- Esqueci a senha (código de recuperação guardado antes) ----------
+        app.MapGet("/recuperar", (HttpContext ctx) => Pagina("Recuperar senha", FormularioRecuperar(null, "")));
+        app.MapPost("/recuperar", async (HttpContext ctx, IAcessoServico acesso, ControleTentativas tentativas) =>
+        {
+            var form = await ctx.Request.ReadFormAsync();
+            var email = form["email"].ToString().Trim();
+            var origem = Origem(ctx);
+            if (MensagemDeEspera(tentativas.Espera(origem)) is { } espera) return Pagina("Recuperar senha", FormularioRecuperar(espera, email));
+            if (form["senha"].ToString() != form["confirmacao"].ToString()) return Pagina("Recuperar senha", FormularioRecuperar("As duas senhas não batem.", email));
+
+            var r = await acesso.RecuperarSenhaAsync(email, form["codigo"].ToString(), form["senha"].ToString());
+            if (!r.Sucesso)
+            {
+                tentativas.RegistrarErro(origem);
+                return Pagina("Recuperar senha", FormularioRecuperar(MensagemDeEspera(tentativas.Espera(origem)) ?? r.Mensagem, email));
+            }
+            tentativas.RegistrarAcerto(origem);
+            return Results.Redirect("/entrar?aviso=senha");
         }).DisableAntiforgery();
 
         // ---------- Convite: a pessoa convidada cria o próprio login ----------
@@ -352,6 +397,23 @@ public static class AcessoWeb
         <input id="confirmacao" name="confirmacao" type="password" autocomplete="new-password" minlength="8" maxlength="128" required />
         """;
 
+    private static string FormularioRecuperar(string? erro, string email) => $"""
+        <p class="entrada__dica">Use o código de recuperação que você guardou em <strong>Seus dados</strong>. Ele vale uma vez.</p>
+        <form method="post" action="/recuperar" class="entrada__form">
+          <label for="email">E-mail</label>
+          <input id="email" name="email" type="email" inputmode="email" autocomplete="username" maxlength="254" value="{H(email)}" required />
+          <label for="codigo">Código de recuperação</label>
+          <input id="codigo" name="codigo" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="40" placeholder="xxxx-xxxx-xxxx-xxxx" required />
+          <label for="senha">Senha nova</label>
+          <input id="senha" name="senha" type="password" autocomplete="new-password" minlength="8" maxlength="128" required />
+          <label for="confirmacao">Repita a senha nova</label>
+          <input id="confirmacao" name="confirmacao" type="password" autocomplete="new-password" minlength="8" maxlength="128" required />
+          {Erro(erro)}
+          <button type="submit" class="botao botao--primario">Trocar a senha</button>
+        </form>
+        <p class="entrada__dica">Sem código? Peça uma senha temporária a quem administra o Fávoa neste computador. <a href="/entrar">Voltar</a></p>
+        """;
+
     private static string FormularioEntrada(string? erro, string? aviso, string? volta, string email, bool cadastroAberto) => $"""
         <form method="post" action="/entrar" class="entrada__form">
           <input type="hidden" name="volta" value="{H(Destino(volta))}" />
@@ -363,7 +425,7 @@ public static class AcessoWeb
           {Aviso(aviso)}
           <button type="submit" class="botao botao--primario">Entrar</button>
         </form>
-        <p class="entrada__dica">Este aparelho fica lembrado por 30 dias.</p>
+        <p class="entrada__dica">Este aparelho fica lembrado por 30 dias. <a href="/recuperar">Esqueci a senha</a></p>
         {(cadastroAberto ? "<p class=\"entrada__dica\"><a href=\"/criar-conta\">Criar uma conta para a minha casa</a></p>" : "")}
         """;
 

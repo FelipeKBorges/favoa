@@ -2291,3 +2291,7 @@ a.botao--primario, a.botao--primario:visited { color: var(--mel-tinta); }
   .painel__tema .segmento { margin-left: 0; display: flex; }
   .painel__tema .segmento__opcao { flex: 1; padding-inline: 6px; }
 }
+
+.aviso-codigo { border: 1px solid var(--borda, #444); border-radius: 12px; padding: 12px 14px; margin: 8px 0; display: grid; gap: 6px; }
+.aviso-codigo p { margin: 0; }
+.aviso-codigo__valor { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1.15rem; letter-spacing: .04em; word-break: break-all; user-select: all; }

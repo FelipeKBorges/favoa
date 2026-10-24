@@ -301,6 +301,53 @@ public sealed class AcessoServico(IDbContextFactory<FavoaDbContext> fabrica, Tim
         return new(true, "Senha temporária gerada. Todos os aparelhos dessa conta vão pedir a senha nova.", senha);
     }
 
+    /// <summary>Tira espaços, hífens e maiúsculas e devolve no formato guardado (xxxx-xxxx-xxxx-xxxx).</summary>
+    internal static string NormalizarCodigo(string? codigo)
+    {
+        var s = new string((codigo ?? "").Where(char.IsLetterOrDigit).ToArray()).ToLowerInvariant();
+        return s.Length == 16 ? $"{s[..4]}-{s[4..8]}-{s[8..12]}-{s[12..]}" : s;
+    }
+
+    public async Task<ResultadoCodigoRecuperacao> GerarCodigoRecuperacaoAsync(Guid usuarioId, CancellationToken ct = default)
+    {
+        await using var db = await fabrica.CreateDbContextAsync(ct);
+        var usuario = await db.Usuarios.FirstOrDefaultAsync(u => u.Id == usuarioId, ct);
+        if (usuario is null) return new(false, "Essa conta não existe mais.");
+
+        // 16 letras e números sem os que se confundem: ~79 bits, inviável de adivinhar.
+        const string alfabeto = "abcdefghjkmnpqrstuvwxyz23456789";
+        var letras = new char[16];
+        for (var i = 0; i < letras.Length; i++) letras[i] = alfabeto[System.Security.Cryptography.RandomNumberGenerator.GetInt32(alfabeto.Length)];
+        var codigo = NormalizarCodigo(new string(letras));
+
+        usuario.CodigoRecuperacaoHash = SenhaSegura.Gerar(codigo);
+        await db.SaveChangesAsync(ct);
+        return new(true, "Código gerado. Guarde num lugar seguro: ele aparece só agora e vale uma vez.", codigo);
+    }
+
+    public async Task<ResultadoRegistro> RecuperarSenhaAsync(string email, string codigo, string senhaNova, CancellationToken ct = default)
+    {
+        const string falha = "E-mail ou código de recuperação inválido.";
+        var emailNormal = SenhaSegura.NormalizarEmail(email);
+        if (emailNormal is null) return new(false, falha);
+
+        await using var db = await fabrica.CreateDbContextAsync(ct);
+        var usuario = await db.Usuarios.FirstOrDefaultAsync(u => u.EmailNormalizado == emailNormal, ct);
+        // Sempre confere um hash (o falso, se não houver conta ou código): o tempo da resposta não revela se o e-mail existe.
+        var confere = SenhaSegura.Verificar(NormalizarCodigo(codigo), usuario?.CodigoRecuperacaoHash ?? HashFalso.Value);
+        if (usuario is null || usuario.CodigoRecuperacaoHash is null || !confere) return new(false, falha);
+        if (SenhaSegura.Validar(senhaNova, emailNormal) is { } problema) return new(false, problema);
+
+        usuario.SenhaHash = SenhaSegura.Gerar(senhaNova);
+        usuario.CodigoRecuperacaoHash = null; // uso único: gere outro em Seus dados
+        usuario.VersaoAcesso++;
+        usuario.FalhasSeguidas = 0;
+        usuario.Bloqueios = 0;
+        usuario.BloqueadoAte = null;
+        await db.SaveChangesAsync(ct);
+        return new(true, "Senha redefinida. Entre com a senha nova e gere outro código de recuperação em Seus dados.");
+    }
+
     public async Task<EstadoAcesso> ObterEstadoAsync(Guid? familiaId, CancellationToken ct = default)
     {
         await using var db = await fabrica.CreateDbContextAsync(ct);

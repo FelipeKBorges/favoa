@@ -265,6 +265,7 @@ public sealed class FavoaDbContext(DbContextOptions<FavoaDbContext> options) : D
             e.Property(x => x.Email).HasMaxLength(254).IsRequired();
             e.Property(x => x.EmailNormalizado).HasMaxLength(254).IsRequired();
             e.Property(x => x.SenhaHash).HasMaxLength(200).IsRequired();
+            e.Property(x => x.CodigoRecuperacaoHash).HasMaxLength(200);
             e.HasIndex(x => x.EmailNormalizado).IsUnique();
             e.HasIndex(x => x.FamiliaId);
             e.HasIndex(x => x.PessoaId).IsUnique();

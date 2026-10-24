@@ -100,6 +100,10 @@ namespace Favoa.Data.Migrations
                         .HasMaxLength(254)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("CodigoRecuperacaoHash")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("FalhasSeguidas")
                         .HasColumnType("INTEGER");
 

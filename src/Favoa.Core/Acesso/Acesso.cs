@@ -30,6 +30,8 @@ public sealed class Usuario
     public int FalhasSeguidas { get; set; }
     public int Bloqueios { get; set; }
     public DateTime? BloqueadoAte { get; set; }
+    /// <summary>Hash do código de recuperação (uso único); nulo se a pessoa ainda não gerou um.</summary>
+    public string? CodigoRecuperacaoHash { get; set; }
     public DateTime CriadoEm { get; set; } = DateTime.UtcNow;
     public DateTime? UltimoAcessoEm { get; set; }
 }
@@ -206,6 +208,9 @@ public sealed record ContaDoComputador(Guid UsuarioId, string Casa, string Pesso
 
 public sealed record ResultadoSenhaTemporaria(bool Sucesso, string Mensagem, string? Senha = null);
 
+/// <summary>Resultado de gerar o código de recuperação: o código só aparece agora, depois fica guardado apenas o hash.</summary>
+public sealed record ResultadoCodigoRecuperacao(bool Sucesso, string Mensagem, string? Codigo = null);
+
 public sealed record DadosUsuario(Guid UsuarioId, string Email, bool Dono, string FamiliaNome);
 
 /// <summary>Famílias, logins e convites. Fica fora do filtro por família de propósito: é ele que decide quem entra em qual.</summary>
@@ -253,6 +258,15 @@ public interface IAcessoServico
 
     /// <summary>Gera uma senha temporária para a conta e derruba os aparelhos dela. A pessoa troca em Seus dados depois de entrar.</summary>
     Task<ResultadoSenhaTemporaria> GerarSenhaTemporariaAsync(Guid usuarioId, CancellationToken ct = default);
+
+    /// <summary>Gera (ou troca) o código de recuperação de quem está logado. Mostra o código uma única vez.</summary>
+    Task<ResultadoCodigoRecuperacao> GerarCodigoRecuperacaoAsync(Guid usuarioId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Esqueci a senha, com o código guardado: confere e-mail e código, troca a senha, derruba os aparelhos e invalida o código.
+    /// A mensagem de erro é a mesma para e-mail inexistente, sem código ou código errado.
+    /// </summary>
+    Task<ResultadoRegistro> RecuperarSenhaAsync(string email, string codigo, string senhaNova, CancellationToken ct = default);
 
     Task<EstadoAcesso> ObterEstadoAsync(Guid? familiaId, CancellationToken ct = default);
 

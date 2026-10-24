@@ -206,4 +206,33 @@ public sealed class IsolamentoTests : IAsyncLifetime
 
         Assert.False((await acesso.GerarSenhaTemporariaAsync(Guid.NewGuid())).Sucesso);
     }
+
+    [Fact]
+    public async Task Codigo_de_recuperacao_troca_a_senha_uma_vez_e_derruba_os_aparelhos()
+    {
+        var acesso = new AcessoServico(_fabrica);
+        var gerado = await acesso.GerarCodigoRecuperacaoAsync(_ana.UsuarioId);
+        Assert.True(gerado.Sucesso);
+        var codigo = gerado.Codigo!;
+        Assert.Matches("^[a-z2-9]{4}(-[a-z2-9]{4}){3}$", codigo);
+        await using (var db = await _fabrica.CreateDbContextAsync())
+            Assert.DoesNotContain(codigo, (await db.Usuarios.SingleAsync(u => u.Id == _ana.UsuarioId)).CodigoRecuperacaoHash!); // só o hash fica
+
+        Assert.False((await acesso.RecuperarSenhaAsync("ana@exemplo.com", "aaaa-bbbb-cccc-dddd", "Outra-senha-9876")).Sucesso);
+        Assert.False((await acesso.RecuperarSenhaAsync("bia@exemplo.com", codigo, "Outra-senha-9876")).Sucesso); // código de outra conta
+        Assert.False((await acesso.RecuperarSenhaAsync("ninguem@exemplo.com", codigo, "Outra-senha-9876")).Sucesso);
+
+        var sessaoAntes = await acesso.ObterSessaoAsync(_ana.UsuarioId);
+        var ok = await acesso.RecuperarSenhaAsync(" ANA@exemplo.com ", codigo.ToUpperInvariant().Replace("-", " "), "Outra-senha-9876");
+        Assert.True(ok.Sucesso, ok.Mensagem);
+        Assert.True((await acesso.EntrarAsync("ana@exemplo.com", "Outra-senha-9876")).Sucesso);
+        Assert.False((await acesso.EntrarAsync("ana@exemplo.com", CasaDeTeste.Senha)).Sucesso);
+        Assert.True((await acesso.ObterSessaoAsync(_ana.UsuarioId))!.Versao > sessaoAntes!.Versao);
+
+        // uso único
+        Assert.False((await acesso.RecuperarSenhaAsync("ana@exemplo.com", codigo, "Terceira-senha-123")).Sucesso);
+        // quem nunca gerou código não consegue recuperar
+        Assert.False((await acesso.RecuperarSenhaAsync("bia@exemplo.com", "", "Terceira-senha-123")).Sucesso);
+        Assert.False((await acesso.GerarCodigoRecuperacaoAsync(Guid.NewGuid())).Sucesso);
+    }
 }

@@ -28,11 +28,21 @@
 
         <div class="conta">
             <div class="conta__linha"><span class="rotulo">Seu e-mail</span><span class="conta__email">@_eu.Email @if (_eu.Dono) { <span class="etiqueta-arquivada">dono da casa</span> }</span></div>
+            @if (_codigoNovo is not null)
+            {
+                <div class="aviso-codigo" role="status">
+                    <p>Seu código de recuperação (aparece só agora, vale uma vez):</p>
+                    <p><strong class="aviso-codigo__valor">@_codigoNovo</strong></p>
+                    <p class="mini">Guarde fora do Fávoa (gerenciador de senhas ou papel). Gerar outro invalida este.</p>
+                    <button type="button" class="botao botao--fantasma botao--pequeno" @onclick="() => _codigoNovo = null">Já guardei</button>
+                </div>
+            }
             @if (!_trocandoSenha)
             {
                 <div class="cadastro__acoes">
                     <button type="button" class="botao botao--fantasma botao--pequeno" @onclick="() => _trocandoSenha = true">Trocar senha</button>
                     <button type="button" class="botao botao--fantasma botao--pequeno" @onclick="Desconectar">Sair de todos os aparelhos</button>
+                    <button type="button" class="botao botao--fantasma botao--pequeno" @onclick="GerarCodigo">Código de recuperação</button>
                     <button type="button" class="botao botao--fantasma botao--pequeno" @onclick='() => Nav.NavigateTo("/sair", forceLoad: true)'>Sair neste aparelho</button>
                 </div>
             }
@@ -206,6 +216,16 @@
         _trocandoSenha = false;
         _senhaAtual = _senhaNova = _senhaConfirmacao = "";
         _erroSenha = null;
+    }
+
+    private string? _codigoNovo;
+
+    private async Task GerarCodigo()
+    {
+        var usuario = (PessoaAtual as Favoa.Web.PessoaDoUsuario)?.UsuarioId;
+        if (usuario is not { } id) return;
+        var r = await Acesso.GerarCodigoRecuperacaoAsync(id);
+        if (r.Sucesso) _codigoNovo = r.Codigo; else Eventos.MostrarMensagem(r.Mensagem);
     }
 
     private async Task Desconectar()
