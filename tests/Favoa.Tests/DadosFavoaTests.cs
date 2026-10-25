@@ -63,7 +63,11 @@ public sealed class DadosFavoaTests : IAsyncLifetime
         var fitnessOrigem = new FitnessServico(_fabricas[origem], new Favoa.Core.Pessoas.PessoaFixa(_pessoas[origem]));
         var ovo = (await fitnessOrigem.BuscarAlimentosAsync("ovo galinha inteiro cru", 5)).First(a => a.Porcoes.Count > 0);
         Assert.True((await fitnessOrigem.SalvarPorcaoAsync(ovo.Id, "Unidade", 58)).Sucesso);
+        var cifra = new CifraDiario(new byte[32]);
+        Assert.True((await new DiarioServico(_fabricas[origem], new Favoa.Core.Pessoas.PessoaFixa(_pessoas[origem]), cifra)
+            .SalvarAsync(Hoje, 4, 3, "entrada que atravessa o arquivo", ["teste"])).Sucesso);
         var arquivo = await origem.ExportarJsonAsync();
+        Assert.DoesNotContain("atravessa", System.Text.Encoding.UTF8.GetString(arquivo.Conteudo)); // o arquivo leva o diário cifrado
 
         var (destinoServico, destino) = await NovoBanco();
         await Registrar(destinoServico, "gastei 999 em lazer"); // será substituído
@@ -87,6 +91,8 @@ public sealed class DadosFavoaTests : IAsyncLifetime
             Assert.True(await db.Porcoes.CountAsync(p => p.Origem == "IBGE") > 6000);
             Assert.Equal(58, (await db.Porcoes.SingleAsync(p => p.Origem == "Meu")).Gramas);
             Assert.Contains(await db.Consumos.ToListAsync(), c => c.Unidade == "Unidade" && c.Quantidade == 2);
+            var entrada = await db.Diario.IgnoreQueryFilters().SingleAsync();
+            Assert.Equal("entrada que atravessa o arquivo", cifra.Decifrar(entrada.Texto, entrada.Id)); // abre com a mesma chave
         }
 
         var painelOrigem = await origemServico.ObterPainelAsync(Hoje);
@@ -201,6 +207,44 @@ public sealed class DadosFavoaTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Backup_manual_restaura_com_os_mesmos_dados_e_passa_na_verificacao()
+    {
+        var (_, dados) = await NovoBanco();
+        var fabrica = _fabricas[dados];
+        int antes;
+        await using (var db = await fabrica.CreateDbContextAsync()) antes = await db.Lancamentos.IgnoreQueryFilters().CountAsync();
+
+        var caminho = await dados.FazerBackupAgoraAsync();
+
+        Assert.True(VerificadorBackup.Verificar(caminho).Ok);
+        // "Restaura": abre a cópia como um banco do app e confere o conteúdo.
+        var restaurado = Path.Combine(Path.GetTempPath(), $"restaurado-{Guid.NewGuid():N}.db");
+        File.Copy(caminho, restaurado);
+        try
+        {
+            await using var db = new FavoaDbContext(new DbContextOptionsBuilder<FavoaDbContext>().UseSqlite($"Data Source={restaurado};Pooling=False").Options);
+            Assert.Empty(await db.Database.GetPendingMigrationsAsync());
+            Assert.Equal(antes, await db.Lancamentos.IgnoreQueryFilters().CountAsync());
+            Assert.Single(await db.Familias.ToListAsync());
+        }
+        finally { SqliteConnection.ClearAllPools(); File.Delete(restaurado); }
+    }
+
+    [Fact]
+    public void Verificador_recusa_arquivo_corrompido_ou_que_nao_e_do_favoa()
+    {
+        var lixo = Path.Combine(Path.GetTempPath(), $"lixo-{Guid.NewGuid():N}.db");
+        File.WriteAllText(lixo, "isto não é um banco SQLite, só texto qualquer repetido. ".PadRight(5000, 'x'));
+        try { Assert.False(VerificadorBackup.Verificar(lixo).Ok); }
+        finally { SqliteConnection.ClearAllPools(); File.Delete(lixo); }
+
+        var vazio = Path.Combine(Path.GetTempPath(), $"vazio-{Guid.NewGuid():N}.db");
+        using (var c = new SqliteConnection($"Data Source={vazio};Pooling=False")) { c.Open(); using var cmd = c.CreateCommand(); cmd.CommandText = "CREATE TABLE x (a)"; cmd.ExecuteNonQuery(); }
+        try { Assert.False(VerificadorBackup.Verificar(vazio).Ok); } // íntegro, mas não é um banco do Fávoa
+        finally { SqliteConnection.ClearAllPools(); File.Delete(vazio); }
+    }
+
+    [Fact]
     public async Task Backup_manual_aparece_na_lista()
     {
         var (_, dados) = await NovoBanco();
@@ -218,6 +262,7 @@ public sealed class DadosFavoaTests : IAsyncLifetime
         foreach (var f in new[] { "orçamento 3000", "uber 23", "novo hábito ler", "fiz ler", "bebi 500 ml", "tarefa pagar luz", "supino 3x10 40kg", "peso 82", "comi 150g de arroz tipo 1 cozido no almoço" })
             await Registrar(servico, f);
         var fabrica = _fabricas[dados];
+        await new DiarioServico(fabrica, new Favoa.Core.Pessoas.PessoaFixa(_pessoas[dados]), new CifraDiario(new byte[32])).SalvarAsync(Hoje, 3, null, "apagar junto", []);
         int contas, categorias;
         await using (var db = await fabrica.CreateDbContextAsync())
             (contas, categorias) = (await db.Contas.CountAsync(), await db.Categorias.CountAsync());
@@ -233,6 +278,7 @@ public sealed class DadosFavoaTests : IAsyncLifetime
             Assert.Equal(0, await db.Habitos.CountAsync());
             Assert.Equal(0, await db.RegistrosHabito.CountAsync());
             Assert.Equal(0, await db.RegistrosAgua.CountAsync());
+            Assert.Equal(0, await db.Diario.IgnoreQueryFilters().CountAsync());
             Assert.Equal(0, await db.Sessoes.CountAsync());
             Assert.Equal(0, await db.Consumos.CountAsync());
             Assert.Equal(0, await db.Pesos.CountAsync());

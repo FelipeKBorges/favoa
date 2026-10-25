@@ -284,6 +284,20 @@ public static class AcessoWeb
             return Results.Redirect("/");
         }).DisableAntiforgery();
 
+        // ---------- Chave do diário (só no próprio computador, por quem é dono) ----------
+        // Sem essa chave o diário cifrado não abre (disco perdido, computador novo). Fica fora da cópia do OneDrive de propósito.
+        app.MapGet("/diario/chave", (HttpContext ctx, Favoa.Core.Diario.ICifraDiario cifra) =>
+        {
+            if (!EhLocal(ctx) || !ctx.User.HasClaim(ClaimDono, "1"))
+                return Results.Text("A chave do diário só pode ser baixada por quem criou a conta da casa, no próprio computador onde o Fávoa roda.", "text/plain; charset=utf-8", statusCode: StatusCodes.Status403Forbidden);
+            var chave = ((Favoa.Data.CifraDiario)cifra).ExportarChave();
+            var texto = "Chave do diário do Fávoa\r\n\r\n" + chave + "\r\n\r\n" +
+                "Guarde este arquivo fora do computador (gerenciador de senhas, pendrive). Quem tiver a chave e o banco lê os diários.\r\n" +
+                "Para restaurar num computador novo: antes de abrir o Fávoa, crie a pasta chaves dentro da pasta de dados e salve a linha da chave, sozinha, no arquivo chaves\\diario.key.\r\n";
+            ctx.Response.Headers.CacheControl = "no-store";
+            return Results.File(System.Text.Encoding.UTF8.GetBytes(texto), "text/plain; charset=utf-8", "favoa-chave-do-diario.txt");
+        });
+
         // ---------- Senhas das contas (só no próprio computador, por quem é dono) ----------
         // O app não manda e-mail: quem esquece a senha pede ao administrador do Fávoa, que gera uma temporária aqui.
         app.MapGet("/admin/senhas", async (HttpContext ctx, IAcessoServico acesso) =>

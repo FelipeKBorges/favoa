@@ -392,8 +392,9 @@ public sealed class AcessoServico(IDbContextFactory<FavoaDbContext> fabrica, Tim
         var temDados = await db.Habitos.AnyAsync(x => x.PessoaId == id, ct) || await db.RegistrosAgua.AnyAsync(x => x.PessoaId == id, ct)
             || await db.Lembretes.AnyAsync(x => x.PessoaId == id, ct) || await db.Fichas.AnyAsync(x => x.PessoaId == id, ct)
             || await db.Sessoes.AnyAsync(x => x.PessoaId == id, ct) || await db.ItensPlano.AnyAsync(x => x.PessoaId == id, ct)
-            || await db.Consumos.AnyAsync(x => x.PessoaId == id, ct) || await db.Pesos.AnyAsync(x => x.PessoaId == id, ct);
-        if (temDados) return new(false, $"{pessoa.Nome} já tem treinos, dieta, hábitos ou lembretes. Para não perder nada, exclua esses dados antes.");
+            || await db.Consumos.AnyAsync(x => x.PessoaId == id, ct) || await db.Pesos.AnyAsync(x => x.PessoaId == id, ct)
+            || await db.Diario.AnyAsync(x => x.PessoaId == id, ct);
+        if (temDados) return new(false, $"{pessoa.Nome} já tem treinos, dieta, hábitos, lembretes ou diário. Para não perder nada, exclua esses dados antes.");
 
         // Lançamentos da casa continuam; só deixam de dizer quem lançou.
         await db.Lancamentos.Where(l => l.PessoaId == id).ExecuteUpdateAsync(u => u.SetProperty(l => l.PessoaId, (Guid?)null), ct);

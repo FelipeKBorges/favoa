@@ -192,6 +192,12 @@ public sealed class CopiaNuvem(OpcoesFavoa opcoes, IDadosFavoa dados, ILogger<Co
             copia.Open();
             origem.BackupDatabase(copia);
         }
+        SqliteConnection.ClearAllPools();
+        if (VerificadorBackup.Verificar(temporario) is { Ok: false } falha)
+        {
+            File.Delete(temporario);
+            throw new IOException($"A cópia do banco não passou na verificação ({falha.Detalhe}); a anterior foi mantida.");
+        }
         File.Move(temporario, destino, overwrite: true);
     }
 

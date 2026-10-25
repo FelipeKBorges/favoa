@@ -80,6 +80,7 @@ public sealed class DadosFavoa(IDbContextFactory<FavoaDbContext> fabrica, Opcoes
         await db.RegistrosHabito.ExecuteDeleteAsync(ct);
         var habitos = await db.Habitos.ExecuteDeleteAsync(ct);
         await db.RegistrosAgua.ExecuteDeleteAsync(ct);
+        await db.Diario.ExecuteDeleteAsync(ct);
         await db.ExerciciosRealizados.ExecuteDeleteAsync(ct);
         var treinos = await db.Sessoes.ExecuteDeleteAsync(ct);
         await db.Consumos.ExecuteDeleteAsync(ct);
@@ -125,6 +126,10 @@ public sealed class DadosFavoa(IDbContextFactory<FavoaDbContext> fabrica, Opcoes
             if (abriAqui) await conexao.CloseAsync();
         }
 
+        SqliteConnection.ClearAllPools();
+        if (VerificadorBackup.Verificar(destino) is { Ok: false } falha)
+            throw new IOException($"A cópia foi criada mas não passou na verificação ({falha.Detalhe}).");
+
         foreach (var antigo in Directory.GetFiles(opcoes.CaminhoBackups, $"{prefixo}-*.db")
                      .OrderDescending()
                      .Skip(CopiasManuaisMantidas))
@@ -164,6 +169,9 @@ public sealed class DadosFavoa(IDbContextFactory<FavoaDbContext> fabrica, Opcoes
                 .Where(x => !AcessoServico.EhChaveLocal(x.Chave)) // PIN e chaves de notificação são deste computador: não saem no arquivo
                 .Select(x => new ConfiguracaoJson(x.Chave.StartsWith(Configuracao.OrcamentoMensalCentavos + "#") ? Configuracao.OrcamentoMensalCentavos : x.Chave, x.Valor)).ToList()) // o arquivo leva a chave simples; ao importar vira a da casa
         {
+            // O diário sai CIFRADO (o arquivo do OneDrive não revela as entradas); só abre com a chave deste computador.
+            Diario = await db.Diario.AsNoTracking().OrderBy(x => x.Data)
+                .Select(x => new DiarioJson(x.Id, x.PessoaId, x.Data, x.Humor, x.Energia, x.Texto, x.Tags, x.CriadoEm, x.AtualizadoEm)).ToListAsync(ct),
             Exercicios = await db.Exercicios.AsNoTracking().OrderBy(x => x.Nome)
                 .Select(x => new ExercicioJson(x.Id, x.Nome, x.Grupo, x.Tipo, x.Ativo, x.CriadoEm)).ToListAsync(ct),
             Fichas = (await db.Fichas.AsNoTracking().Include(f => f.Itens).OrderBy(f => f.Ordem).ToListAsync(ct))
@@ -351,6 +359,7 @@ public sealed class DadosFavoa(IDbContextFactory<FavoaDbContext> fabrica, Opcoes
             await db.ItensProjeto.ExecuteDeleteAsync(ct);
             await db.Projetos.ExecuteDeleteAsync(ct);
             await db.RegistrosAgua.ExecuteDeleteAsync(ct);
+            await db.Diario.ExecuteDeleteAsync(ct);
             await db.Categorias.ExecuteDeleteAsync(ct);
             await db.Contas.ExecuteDeleteAsync(ct);
             // O PIN e a versão de acesso ficam: importar dados não muda quem pode entrar.
@@ -422,6 +431,11 @@ public sealed class DadosFavoa(IDbContextFactory<FavoaDbContext> fabrica, Opcoes
             db.Habitos.AddRange(pacote.Habitos.Select(x => new Habito { Id = x.Id, Nome = x.Nome, Ativo = x.Ativo, CriadoEm = x.CriadoEm, PessoaId = Dono(x.PessoaId) }));
             db.RegistrosHabito.AddRange(pacote.RegistrosHabito.Select(x => new RegistroHabito { Id = x.Id, HabitoId = x.HabitoId, Data = x.Data, CriadoEm = x.CriadoEm }));
             db.RegistrosAgua.AddRange(pacote.Agua.Select(x => new RegistroAgua { Id = x.Id, Mililitros = x.Mililitros, Data = x.Data, CriadoEm = x.CriadoEm, PessoaId = Dono(x.PessoaId) }));
+            db.Diario.AddRange((pacote.Diario ?? []).Select(x => new Favoa.Core.Diario.EntradaDiario
+            {
+                Id = x.Id, PessoaId = Dono(x.PessoaId), FamiliaId = familiaId, Data = x.Data, Humor = x.Humor, Energia = x.Energia,
+                Texto = x.Texto, Tags = x.Tags, CriadoEm = x.CriadoEm, AtualizadoEm = x.AtualizadoEm,
+            }));
             db.Configuracoes.AddRange(pacote.Configuracoes
                 .Where(x => !AcessoServico.EhChaveLocal(x.Chave))
                 .Select(x => new Configuracao { Chave = x.Chave == Configuracao.OrcamentoMensalCentavos ? AbrirBanco.ChaveDaFamilia(x.Chave, familiaId) : x.Chave, Valor = x.Valor }));
@@ -575,6 +589,7 @@ public sealed class DadosFavoa(IDbContextFactory<FavoaDbContext> fabrica, Opcoes
         List<AguaJson> Agua, List<ConfiguracaoJson> Configuracoes)
     {
         // Versão 2 (nulos em arquivos da versão 1)
+        public List<DiarioJson>? Diario { get; init; }
         public List<ExercicioJson>? Exercicios { get; init; }
         public List<FichaJson>? Fichas { get; init; }
         public List<SessaoJson>? Sessoes { get; init; }
@@ -615,6 +630,7 @@ public sealed class DadosFavoa(IDbContextFactory<FavoaDbContext> fabrica, Opcoes
     private sealed record ItemProjetoJson(Guid Id, Guid ProjetoId, TipoItemProjeto Tipo, string Texto, bool Feito, DateOnly? Data, TimeOnly? Hora, int Ordem, DateTime CriadoEm);
     private sealed record HabitoJson(Guid Id, string Nome, bool Ativo, DateTime CriadoEm) { public Guid? PessoaId { get; init; } }
     private sealed record RegistroHabitoJson(Guid Id, Guid HabitoId, DateOnly Data, DateTime CriadoEm);
+    private sealed record DiarioJson(Guid Id, Guid? PessoaId, DateOnly Data, int? Humor, int? Energia, string Texto, string Tags, DateTime CriadoEm, DateTime AtualizadoEm);
     private sealed record AguaJson(Guid Id, int Mililitros, DateOnly Data, DateTime CriadoEm) { public Guid? PessoaId { get; init; } }
     private sealed record ConfiguracaoJson(string Chave, string Valor);
     private sealed record ExercicioJson(Guid Id, string Nome, string? Grupo, TipoExercicio Tipo, bool Ativo, DateTime CriadoEm);

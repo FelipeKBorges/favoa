@@ -106,6 +106,7 @@ public sealed class IsolamentoTests : IAsyncLifetime
         db.RegistrosAgua.Add(new RegistroAgua { Mililitros = 250, Data = Hoje });
         db.Pesos.Add(new RegistroPeso { Kg = 70, Data = Hoje });
         await db.SaveChangesAsync();
+        Assert.True((await new DiarioServico(_fabrica, Eu(_ana), new CifraDiario(new byte[32])).SalvarAsync(Hoje, 4, 3, "segredo da Ana", ["trabalho"])).Sucesso);
 
         var servico = new FavoaServico(_fabrica, Eu(_ana));
         foreach (var frase in new[] { "gastei 40 no mercado", "orçamento 3000" })
@@ -137,6 +138,7 @@ public sealed class IsolamentoTests : IAsyncLifetime
         Assert.Empty(await b.Habitos.ToListAsync());
         Assert.Empty(await b.RegistrosAgua.ToListAsync());
         Assert.Empty(await b.Pesos.ToListAsync());
+        Assert.Empty(await b.Diario.ToListAsync());
         Assert.Empty(await b.Lancamentos.ToListAsync());
         Assert.DoesNotContain(await b.Pessoas.ToListAsync(), p => p.Id == _ana.PessoaId);
     }

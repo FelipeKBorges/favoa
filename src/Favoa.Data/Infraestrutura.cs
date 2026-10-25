@@ -67,6 +67,8 @@ public static class InfraestruturaExtensions
         services.AddScoped<Favoa.Core.Fitness.IFitnessServico, FitnessServico>();
         services.AddScoped<Favoa.Core.Rotina.ILembretesServico, LembretesServico>();
         services.AddScoped<Favoa.Core.Projetos.IProjetosServico, ProjetosServico>();
+        services.AddSingleton<Favoa.Core.Diario.ICifraDiario, CifraDiario>();
+        services.AddScoped<Favoa.Core.Diario.IDiarioServico, DiarioServico>();
         // Não dependem de pessoa (enxergam o banco todo ou cuidam do acesso).
         services.AddSingleton<Favoa.Core.Dados.IDadosFavoa, DadosFavoa>();
         services.AddSingleton<Favoa.Core.Acesso.IAcessoServico, AcessoServico>();
@@ -342,6 +344,15 @@ public sealed class BackupDiario(OpcoesFavoa opcoes, ILogger<BackupDiario> log) 
             origem.BackupDatabase(copia);
         }
         SqliteConnection.ClearAllPools();
+
+        var (integro, detalhe) = VerificadorBackup.Verificar(destino);
+        if (!integro)
+        {
+            // Não conta como backup do dia (e não empurra um bom para fora da rotação): a próxima rodada tenta de novo.
+            File.Move(destino, destino + ".corrompido", overwrite: true);
+            log.LogError("Backup do Fávoa não passou na verificação ({Detalhe}); arquivo guardado como .corrompido", detalhe);
+            return null;
+        }
 
         foreach (var antigo in Directory.GetFiles(opcoes.CaminhoBackups, "favoa-*.db")
                      .OrderDescending()

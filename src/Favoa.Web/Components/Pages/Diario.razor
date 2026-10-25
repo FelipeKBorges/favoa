@@ -1,0 +1,362 @@
+@page "/diario"
+@using System.Globalization
+@using Favoa.Core.Diario
+@implements IDisposable
+@inject IDiarioServico Servico
+@inject NavigationManager Nav
+@inject EventosFavoa Eventos
+
+<PageTitle>Diário · Fávoa</PageTitle>
+
+<main class="modulo modulo--largo diario">
+    <header class="pagina__topo">
+        <div class="pagina__titulo">
+            <h1>Diário</h1>
+            <p class="pagina__resumo"><span>Só você vê. O texto fica cifrado.</span></p>
+        </div>
+        <div class="segmento" role="tablist" aria-label="Diário">
+            <button type="button" role="tab" aria-selected="@(_aba == "dia")" class="segmento__opcao @(_aba == "dia" ? "segmento__opcao--ativa" : "")" @onclick='() => MudarAba("dia")'>Dia</button>
+            <button type="button" role="tab" aria-selected="@(_aba == "linha")" class="segmento__opcao @(_aba == "linha" ? "segmento__opcao--ativa" : "")" @onclick='() => MudarAba("linha")'>Linha do tempo</button>
+        </div>
+    </header>
+
+    @if (_aba == "dia")
+    {
+        <section class="cartao diario__dia" aria-label="Entrada do dia">
+            <div class="diario__data">
+                <button type="button" class="botao-icone" aria-label="Dia anterior" @onclick="() => Ir(_data.AddDays(-1))">‹</button>
+                <div class="diario__data-texto">
+                    <strong>@_data.ToString("dddd, d 'de' MMMM", Pt)</strong>
+                    @if (_data == Hoje) { <span class="etiqueta-arquivada">hoje</span> }
+                </div>
+                <button type="button" class="botao-icone" aria-label="Próximo dia" disabled="@(_data >= Hoje)" @onclick="() => Ir(_data.AddDays(1))">›</button>
+                @if (_data != Hoje)
+                {
+                    <button type="button" class="botao botao--fantasma botao--pequeno" @onclick="() => Ir(Hoje)">Hoje</button>
+                }
+            </div>
+
+            @if (!_carregado)
+            {
+                <p class="carregando">Carregando…</p>
+            }
+            else if (!_legivel)
+            {
+                <p class="aviso-codigo">Esta entrada não abre: a chave do diário deste computador não confere. Restaure a chave guardada (veja Seus dados) em vez de gravar por cima.</p>
+            }
+            else
+            {
+                <div class="diario__bloco">
+                    <span class="rotulo" id="rot-humor">Como foi o dia?</span>
+                    <div class="diario__humor" role="radiogroup" aria-labelledby="rot-humor">
+                        @foreach (var (valor, rosto, nome) in Humores)
+                        {
+                            <button type="button" role="radio" aria-checked="@(_humor == valor)" aria-label="@nome"
+                                    class="diario__rosto diario__rosto--@valor @(_humor == valor ? "diario__rosto--ativo" : "")"
+                                    @onclick="() => EscolherHumor(valor)">
+                                <span aria-hidden="true">@rosto</span><small>@nome</small>
+                            </button>
+                        }
+                    </div>
+                </div>
+
+                <div class="diario__bloco">
+                    <span class="rotulo" id="rot-energia">Energia</span>
+                    <div class="segmento diario__energia" role="radiogroup" aria-labelledby="rot-energia">
+                        @for (var n = 1; n <= 5; n++)
+                        {
+                            var valor = n;
+                            <button type="button" role="radio" aria-checked="@(_energia == valor)" aria-label="Energia @valor de 5"
+                                    class="segmento__opcao @(_energia == valor ? "segmento__opcao--ativa" : "")"
+                                    @onclick="() => EscolherEnergia(valor)">@valor</button>
+                        }
+                    </div>
+                </div>
+
+                <div class="diario__bloco">
+                    <label class="rotulo" for="diario-texto">O que aconteceu?</label>
+                    <textarea id="diario-texto" class="diario__texto" rows="8" maxlength="@DiarioMax" placeholder="Escreva do jeito que vier. Ninguém vê, só você."
+                              @onchange="AoMudarTexto">@_texto</textarea>
+                </div>
+
+                <div class="diario__bloco">
+                    <label class="rotulo" for="diario-tags">Tags</label>
+                    <input id="diario-tags" type="text" class="diario__tags" autocomplete="off" maxlength="200" placeholder="trabalho, família, treino"
+                           value="@_tags" @onchange="AoMudarTags" />
+                    @if (_sugestoes.Count > 0)
+                    {
+                        <div class="chips diario__sugestoes" aria-label="Tags usadas antes">
+                            @foreach (var t in _sugestoes)
+                            {
+                                <button type="button" class="chip" @onclick="() => AdicionarTag(t)">#@t</button>
+                            }
+                        </div>
+                    }
+                </div>
+
+                <div class="diario__acoes">
+                    <button type="button" class="botao botao--primario" disabled="@_salvando" @onclick="() => Salvar(true)">Guardar</button>
+                    @if (_existe)
+                    {
+                        @if (!_confirmaExcluir)
+                        {
+                            <button type="button" class="botao botao--fantasma botao--perigo-texto" @onclick="() => _confirmaExcluir = true">Excluir</button>
+                        }
+                        else
+                        {
+                            <span class="diario__confirma">Excluir este dia para sempre?</span>
+                            <button type="button" class="botao botao--perigo botao--pequeno" @onclick="Excluir">Excluir</button>
+                            <button type="button" class="botao botao--fantasma botao--pequeno" @onclick="() => _confirmaExcluir = false">Cancelar</button>
+                        }
+                    }
+                    <span class="diario__status" role="status" aria-live="polite">@_status</span>
+                </div>
+            }
+        </section>
+
+        <p class="dados__dica diario__nota">O diário fica cifrado no banco, mas quem administra este computador guarda a chave. Guarde uma cópia dela para o diário abrir mesmo se o disco falhar: <a href="/diario/chave" download>baixar a chave</a> (só quem criou a conta, no próprio computador).</p>
+    }
+    else
+    {
+        <section class="cartao diario__mes" aria-label="Mês">
+            <div class="diario__data">
+                <button type="button" class="botao-icone" aria-label="Mês anterior" @onclick="() => IrMes(-1)">‹</button>
+                <div class="diario__data-texto"><strong>@_mes.ToString("MMMM 'de' yyyy", Pt)</strong></div>
+                <button type="button" class="botao-icone" aria-label="Próximo mês" disabled="@(_mes >= MesAtual)" @onclick="() => IrMes(1)">›</button>
+            </div>
+            <div class="diario__grade" role="grid" aria-label="Dias do mês">
+                @foreach (var d in new[] { "D", "S", "T", "Q", "Q", "S", "S" })
+                {
+                    <span class="diario__cab" aria-hidden="true">@d</span>
+                }
+                @for (var i = 0; i < Deslocamento; i++) { <span></span> }
+                @for (var dia = 1; dia <= DateTime.DaysInMonth(_mes.Year, _mes.Month); dia++)
+                {
+                    var data = new DateOnly(_mes.Year, _mes.Month, dia);
+                    var marca = _diasMes.FirstOrDefault(x => x.Data == data);
+                    <button type="button" class="diario__dia-cel @(marca is not null ? "diario__dia-cel--tem" : "") @(marca?.Humor is { } h ? $"diario__h{h}" : "") @(data == Hoje ? "diario__dia-cel--hoje" : "")"
+                            aria-label="@(DescreverDia(data, marca))" disabled="@(data > Hoje)" @onclick="() => AbrirDia(data)">
+                        <span>@dia</span>
+                        @if (marca?.Humor is { } hm) { <small aria-hidden="true">@Humores[hm - 1].Rosto</small> }
+                        else if (marca is not null) { <small aria-hidden="true">•</small> }
+                    </button>
+                }
+            </div>
+        </section>
+
+        <section class="cartao diario__busca" aria-label="Buscar">
+            <div class="filtros">
+                <label class="so-leitor" for="diario-busca">Buscar no diário</label>
+                <input id="diario-busca" type="search" class="diario__campo-busca" autocomplete="off" placeholder="Buscar no diário" value="@_busca" @oninput="AoBuscar" />
+            </div>
+            @if (_sugestoes.Count > 0)
+            {
+                <div class="chips diario__sugestoes" aria-label="Filtrar por tag">
+                    @foreach (var t in _sugestoes)
+                    {
+                        <button type="button" class="chip @(_filtroTag == t ? "chip--modulo" : "")" aria-pressed="@(_filtroTag == t)" @onclick="() => FiltrarTag(t)">#@t</button>
+                    }
+                </div>
+            }
+
+            @if (_lista is null)
+            {
+                <p class="carregando">Carregando…</p>
+            }
+            else if (_lista.Count == 0)
+            {
+                <p class="vazio">@(string.IsNullOrWhiteSpace(_busca) && _filtroTag is null ? "Nenhuma entrada ainda. Comece pelo dia de hoje." : "Nada encontrado.")</p>
+            }
+            else
+            {
+                <ul class="diario__lista">
+                    @foreach (var e in _lista)
+                    {
+                        <li>
+                            <button type="button" class="diario__item" @onclick="() => AbrirDia(e.Data)">
+                                <span class="diario__item-topo">
+                                    <strong>@e.Data.ToString("ddd, d 'de' MMM yyyy", Pt)</strong>
+                                    @if (e.Humor is { } h) { <span class="diario__item-humor" aria-label="Humor @Humores[h - 1].Nome">@Humores[h - 1].Rosto</span> }
+                                </span>
+                                @if (e.Previa.Length > 0) { <span class="diario__item-previa">@e.Previa</span> }
+                                @if (e.Tags.Count > 0) { <span class="diario__item-tags">@string.Join(" ", e.Tags.Select(t => "#" + t))</span> }
+                            </button>
+                        </li>
+                    }
+                </ul>
+            }
+        </section>
+    }
+</main>
+
+@code {
+    private static readonly CultureInfo Pt = new("pt-BR");
+    private const int DiarioMax = 20_000;
+    private static readonly (int Valor, string Rosto, string Nome)[] Humores =
+    [
+        (1, "😞", "Péssimo"), (2, "😕", "Ruim"), (3, "😐", "Normal"), (4, "🙂", "Bom"), (5, "😄", "Ótimo"),
+    ];
+
+    [SupplyParameterFromQuery(Name = "data")] public string? DataParametro { get; set; }
+
+    private static DateOnly Hoje => DateOnly.FromDateTime(DateTime.Now);
+    private static DateOnly MesAtual => new(Hoje.Year, Hoje.Month, 1);
+
+    private string _aba = "dia";
+    private DateOnly _data = Hoje;
+    private DateOnly _mes = MesAtual;
+    private bool _carregado, _legivel = true, _existe, _salvando, _confirmaExcluir;
+    private int? _humor, _energia;
+    private string _texto = "", _tags = "", _status = "", _busca = "";
+    private string? _filtroTag;
+    private List<string> _sugestoes = [];
+    private IReadOnlyList<DiaDoDiario> _diasMes = [];
+    private IReadOnlyList<ResumoEntrada>? _lista;
+    private DateOnly? _dataCarregada;
+    private CancellationTokenSource? _cts = new();
+
+    private int Deslocamento => (int)new DateTime(_mes.Year, _mes.Month, 1).DayOfWeek;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (DateOnly.TryParseExact(DataParametro, "yyyy-MM-dd", out var pedida) && pedida <= Hoje && pedida != _dataCarregada)
+        {
+            _data = pedida;
+            _aba = "dia";
+        }
+        if (_aba == "dia" && _dataCarregada != _data) await CarregarDiaAsync();
+    }
+
+    private async Task CarregarDiaAsync()
+    {
+        _carregado = false;
+        _confirmaExcluir = false;
+        _status = "";
+        var e = await Servico.ObterAsync(_data);
+        _existe = e is not null;
+        _legivel = e?.Legivel ?? true;
+        _humor = e?.Humor;
+        _energia = e?.Energia;
+        _texto = e?.Texto ?? "";
+        _tags = e is null ? "" : string.Join(", ", e.Tags);
+        _sugestoes = [.. await Servico.TagsFrequentesAsync()];
+        _dataCarregada = _data;
+        _carregado = true;
+    }
+
+    private async Task Ir(DateOnly data)
+    {
+        if (data > Hoje) return;
+        await SalvarSePreciso();
+        _data = data;
+        await CarregarDiaAsync();
+    }
+
+    private async Task MudarAba(string aba)
+    {
+        if (aba == _aba) return;
+        if (_aba == "dia") await SalvarSePreciso();
+        _aba = aba;
+        if (aba == "linha") { _mes = new DateOnly(_data.Year, _data.Month, 1); await CarregarLinhaAsync(); }
+        else await CarregarDiaAsync();
+    }
+
+    private async Task AbrirDia(DateOnly data)
+    {
+        _data = data;
+        _aba = "dia";
+        await CarregarDiaAsync();
+    }
+
+    private async Task CarregarLinhaAsync()
+    {
+        _diasMes = await Servico.MesAsync(_mes.Year, _mes.Month);
+        _sugestoes = [.. await Servico.TagsFrequentesAsync()];
+        _lista = await Servico.ListarAsync(_busca, _filtroTag);
+    }
+
+    private async Task IrMes(int delta)
+    {
+        var novo = _mes.AddMonths(delta);
+        if (novo > MesAtual) return;
+        _mes = novo;
+        _diasMes = await Servico.MesAsync(_mes.Year, _mes.Month);
+    }
+
+    private async Task AoBuscar(ChangeEventArgs e)
+    {
+        _busca = e.Value?.ToString() ?? "";
+        _lista = await Servico.ListarAsync(_busca, _filtroTag);
+    }
+
+    private async Task FiltrarTag(string tag)
+    {
+        _filtroTag = _filtroTag == tag ? null : tag;
+        _lista = await Servico.ListarAsync(_busca, _filtroTag);
+    }
+
+    private string DescreverDia(DateOnly data, DiaDoDiario? marca) =>
+        $"{data.ToString("d 'de' MMMM", Pt)}: " + (marca is null ? "sem entrada" : marca.Humor is { } h ? $"humor {Humores[h - 1].Nome.ToLowerInvariant()}" : "com entrada");
+
+    private async Task EscolherHumor(int valor)
+    {
+        _humor = _humor == valor ? null : valor;
+        await SalvarSePreciso();
+    }
+
+    private async Task EscolherEnergia(int valor)
+    {
+        _energia = _energia == valor ? null : valor;
+        await SalvarSePreciso();
+    }
+
+    private async Task AoMudarTexto(ChangeEventArgs e) { _texto = e.Value?.ToString() ?? ""; await SalvarSePreciso(); }
+    private async Task AoMudarTags(ChangeEventArgs e) { _tags = e.Value?.ToString() ?? ""; await SalvarSePreciso(); }
+
+    private async Task AdicionarTag(string tag)
+    {
+        var atuais = TagsDiario.Normalizar([_tags]).ToList();
+        if (!atuais.Contains(tag)) atuais.Add(tag);
+        _tags = string.Join(", ", atuais);
+        await SalvarSePreciso();
+    }
+
+    /// <summary>Guarda sozinho quando há algo a guardar (ou o dia já existia); em branco não cria entrada.</summary>
+    private async Task SalvarSePreciso()
+    {
+        if (!_carregado || !_legivel) return;
+        var vazio = string.IsNullOrWhiteSpace(_texto) && _humor is null && _energia is null && TagsDiario.Normalizar([_tags]).Count == 0;
+        if (vazio && !_existe) return;
+        if (vazio) return; // entrada existente ficou em branco: só sai pelo botão Excluir
+        await Salvar(false);
+    }
+
+    private async Task Salvar(bool avisar)
+    {
+        if (_salvando) return;
+        _salvando = true;
+        try
+        {
+            var r = await Servico.SalvarAsync(_data, _humor, _energia, _texto, TagsDiario.Normalizar([_tags]));
+            _status = r.Sucesso ? "Guardado" : r.Mensagem;
+            if (r.Sucesso)
+            {
+                _existe = true;
+                _tags = string.Join(", ", TagsDiario.Normalizar([_tags]));
+                _sugestoes = [.. await Servico.TagsFrequentesAsync()];
+                if (avisar) Eventos.MostrarMensagem(r.Mensagem);
+            }
+            else if (avisar) Eventos.MostrarMensagem(r.Mensagem);
+        }
+        finally { _salvando = false; }
+    }
+
+    private async Task Excluir()
+    {
+        var r = await Servico.ExcluirAsync(_data);
+        Eventos.MostrarMensagem(r.Mensagem);
+        await CarregarDiaAsync();
+    }
+
+    public void Dispose() { _cts?.Cancel(); _cts?.Dispose(); _cts = null; }
+}

@@ -137,6 +137,51 @@ namespace Favoa.Data.Migrations
                     b.ToTable("cfg_usuario", (string)null);
                 });
 
+            modelBuilder.Entity("Favoa.Core.Diario.EntradaDiario", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("AtualizadoEm")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CriadoEm")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly>("Data")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("Energia")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid?>("FamiliaId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("Humor")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid?>("PessoaId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Tags")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Texto")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FamiliaId");
+
+                    b.HasIndex("PessoaId", "Data")
+                        .IsUnique();
+
+                    b.ToTable("dia_entrada", (string)null);
+                });
+
             modelBuilder.Entity("Favoa.Core.Financas.Categoria", b =>
                 {
                     b.Property<Guid>("Id")

@@ -38,6 +38,7 @@ public sealed class FavoaDbContext(DbContextOptions<FavoaDbContext> options) : D
     public DbSet<Habito> Habitos => Set<Habito>();
     public DbSet<RegistroHabito> RegistrosHabito => Set<RegistroHabito>();
     public DbSet<RegistroAgua> RegistrosAgua => Set<RegistroAgua>();
+    public DbSet<Favoa.Core.Diario.EntradaDiario> Diario => Set<Favoa.Core.Diario.EntradaDiario>();
     public DbSet<Configuracao> Configuracoes => Set<Configuracao>();
     public DbSet<Recorrencia> Recorrencias => Set<Recorrencia>();
     public DbSet<Lembrete> Lembretes => Set<Lembrete>();
@@ -145,6 +146,12 @@ public sealed class FavoaDbContext(DbContextOptions<FavoaDbContext> options) : D
         {
             e.ToTable("rot_agua");
             e.HasIndex(x => x.Data);
+        });
+
+        b.Entity<Favoa.Core.Diario.EntradaDiario>(e =>
+        {
+            e.ToTable("dia_entrada");
+            e.HasIndex(x => new { x.PessoaId, x.Data }).IsUnique();
         });
 
         b.Entity<Configuracao>(e =>
@@ -296,6 +303,7 @@ public sealed class FavoaDbContext(DbContextOptions<FavoaDbContext> options) : D
         b.Entity<Habito>().HasQueryFilter(x => (FamiliaAtual == null || x.FamiliaId == FamiliaAtual) && (PessoaAtual == null || x.PessoaId == PessoaAtual));
         b.Entity<RegistroHabito>().HasQueryFilter(x => (FamiliaAtual == null || x.FamiliaId == FamiliaAtual) && (PessoaAtual == null || x.Habito!.PessoaId == PessoaAtual));
         b.Entity<RegistroAgua>().HasQueryFilter(x => (FamiliaAtual == null || x.FamiliaId == FamiliaAtual) && (PessoaAtual == null || x.PessoaId == PessoaAtual));
+        b.Entity<Favoa.Core.Diario.EntradaDiario>().HasQueryFilter(x => (FamiliaAtual == null || x.FamiliaId == FamiliaAtual) && (PessoaAtual == null || x.PessoaId == PessoaAtual));
         b.Entity<Lembrete>().HasQueryFilter(x => (FamiliaAtual == null || x.FamiliaId == FamiliaAtual) && (PessoaAtual == null || x.PessoaId == PessoaAtual));
         b.Entity<AssinaturaPush>().HasQueryFilter(x => (FamiliaAtual == null || x.FamiliaId == FamiliaAtual) && (PessoaAtual == null || x.PessoaId == PessoaAtual));
         b.Entity<FichaTreino>().HasQueryFilter(x => (FamiliaAtual == null || x.FamiliaId == FamiliaAtual) && (PessoaAtual == null || x.PessoaId == PessoaAtual));
@@ -334,7 +342,7 @@ public sealed class FavoaDbContext(DbContextOptions<FavoaDbContext> options) : D
                      typeof(Projeto), typeof(Exercicio), typeof(Alimento),
                      typeof(Habito), typeof(RegistroHabito), typeof(RegistroAgua), typeof(Lembrete), typeof(AssinaturaPush), typeof(FichaTreino),
                      typeof(ItemFicha), typeof(SessaoTreino), typeof(ExercicioRealizado), typeof(ItemPlano), typeof(Consumo), typeof(RegistroPeso),
-                     typeof(MedidaCorporal), typeof(ItemProjeto), typeof(TarefaResponsavel) })
+                     typeof(MedidaCorporal), typeof(ItemProjeto), typeof(TarefaResponsavel), typeof(Favoa.Core.Diario.EntradaDiario) })
             b.Entity(tipo).HasIndex(nameof(IDaFamilia.FamiliaId));
     }
 

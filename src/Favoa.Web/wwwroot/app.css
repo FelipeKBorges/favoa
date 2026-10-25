@@ -2295,3 +2295,46 @@ a.botao--primario, a.botao--primario:visited { color: var(--mel-tinta); }
 .aviso-codigo { border: 1px solid var(--borda, #444); border-radius: 12px; padding: 12px 14px; margin: 8px 0; display: grid; gap: 6px; }
 .aviso-codigo p { margin: 0; }
 .aviso-codigo__valor { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1.15rem; letter-spacing: .04em; word-break: break-all; user-select: all; }
+
+/* ---------- Diário ---------- */
+.diario__dia, .diario__mes, .diario__busca { display: grid; gap: 18px; }
+.diario__data { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.diario__data-texto { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.diario__data-texto strong, .diario__item-topo strong { display: inline-block; }
+.diario__data-texto strong::first-letter, .diario__item-topo strong::first-letter { text-transform: uppercase; }
+.diario__bloco { display: grid; gap: 8px; }
+.diario__humor { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.diario__rosto { display: grid; justify-items: center; gap: 2px; padding: 8px 2px; min-height: 64px; border-radius: 12px; border: 1px solid var(--borda-forte); background: var(--superficie-2); color: var(--texto-suave); cursor: pointer; }
+.diario__rosto span { font-size: 26px; line-height: 1; }
+.diario__rosto small { font-size: 11px; }
+.diario__rosto--ativo { border-color: var(--mel); background: var(--mel-vidro); color: var(--texto); font-weight: 700; }
+.diario__energia { width: 100%; }
+.diario__energia .segmento__opcao { flex: 1; padding: 0; }
+.diario__texto, .diario__tags, .diario__campo-busca {
+    width: 100%; box-sizing: border-box; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--borda-forte);
+    background: var(--fundo); color: var(--texto); font: inherit; line-height: 1.5;
+}
+.diario__texto { resize: vertical; min-height: 160px; }
+.diario__texto:focus, .diario__tags:focus, .diario__campo-busca:focus { outline: none; border-color: var(--mel); }
+.diario__acoes { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.diario__confirma { font-size: 14px; color: var(--alerta); }
+.diario__status { margin-left: auto; font-size: 13px; color: var(--texto-apagado); }
+.diario__nota { margin: 12px 4px 0; }
+.diario__grade { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.diario__cab { text-align: center; font-size: 12px; color: var(--texto-apagado); padding: 2px 0; }
+.diario__dia-cel { display: grid; justify-items: center; align-content: center; gap: 1px; min-height: 46px; padding: 2px; border-radius: 10px; border: 1px solid transparent; background: transparent; color: var(--texto-suave); cursor: pointer; font: inherit; }
+.diario__dia-cel small { font-size: 13px; line-height: 1; min-height: 13px; }
+.diario__dia-cel:disabled { opacity: .35; cursor: default; }
+.diario__dia-cel--tem { background: var(--superficie-2); color: var(--texto); }
+.diario__dia-cel--hoje { border-color: var(--mel); }
+.diario__h1 { background: rgba(192, 80, 61, .35); }
+.diario__h2 { background: rgba(217, 138, 61, .30); }
+.diario__h3 { background: rgba(160, 150, 120, .28); }
+.diario__h4 { background: rgba(127, 200, 180, .28); }
+.diario__h5 { background: rgba(127, 200, 180, .50); }
+.diario__lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.diario__item { width: 100%; text-align: left; display: grid; gap: 4px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--borda); background: var(--superficie-2); color: var(--texto); font: inherit; cursor: pointer; }
+.diario__item:hover { border-color: var(--borda-forte); }
+.diario__item-topo { display: flex; justify-content: space-between; gap: 8px; }
+.diario__item-previa { color: var(--texto-suave); font-size: 14px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.diario__item-tags { color: var(--mel-claro); font-size: 12px; }
