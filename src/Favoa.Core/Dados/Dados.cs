@@ -58,4 +58,15 @@ public interface IDadosFavoa
     /// e mantém pessoas, PINs, aparelhos, configurações, contas, categorias, fichas, plano e metas. Faz um backup antes.
     /// </summary>
     Task<ResultadoImportacao> ComecarDoZeroAsync(CancellationToken ct = default);
+
+    /// <summary>Quanto há de histórico financeiro numa casa (para mostrar antes de apagar).</summary>
+    Task<ContagemFinancas> ContarFinancasAsync(Guid familiaId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Zera o histórico financeiro de UMA casa (funciona com várias famílias no mesmo Fávoa): apaga os lançamentos e, se pedido, as contas fixas.
+    /// Ficam contas, categorias, limites e orçamento. Contas fixas mantidas só voltam a lançar a partir de amanhã. Faz um backup antes.
+    /// </summary>
+    Task<ResultadoImportacao> ZerarFinancasAsync(Guid familiaId, bool apagarContasFixas, CancellationToken ct = default);
 }
+
+public sealed record ContagemFinancas(int Lancamentos, int ContasFixas);

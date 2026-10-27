@@ -1,6 +1,7 @@
 using Favoa.Core;
 using Favoa.Core.Acesso;
 using Favoa.Core.Captura;
+using Favoa.Core.Dados;
 using Favoa.Core.Fitness;
 using Favoa.Core.Pessoas;
 using Favoa.Core.Projetos;
@@ -236,5 +237,66 @@ public sealed class IsolamentoTests : IAsyncLifetime
         // quem nunca gerou código não consegue recuperar
         Assert.False((await acesso.RecuperarSenhaAsync("bia@exemplo.com", "", "Terceira-senha-123")).Sucesso);
         Assert.False((await acesso.GerarCodigoRecuperacaoAsync(Guid.NewGuid())).Sucesso);
+    }
+
+    private async Task<(int Lancamentos, int Fixas, int Contas, int Categorias, long Orcamento)> FotoFinancas(SessaoUsuario s)
+    {
+        await using var db = await Abrir(s);
+        var painel = await new FavoaServico(_fabrica, Eu(s)).ObterPainelAsync(Hoje);
+        return (await db.Lancamentos.CountAsync(), await db.Recorrencias.CountAsync(), await db.Contas.CountAsync(), await db.Categorias.CountAsync(), painel.Resumo.OrcamentoMensalCentavos);
+    }
+
+    private async Task PrepararFinancas(SessaoUsuario s)
+    {
+        var servico = new FavoaServico(_fabrica, Eu(s));
+        foreach (var frase in new[] { "gastei 40 no mercado", "recebi 1000 de salário", "orçamento 3000" })
+            Assert.True((await servico.RegistrarAsync(InterpretadorFrase.Interpretar(frase, await servico.ObterContextoAsync(Hoje)))).Sucesso);
+        await using var db = await Abrir(s);
+        db.Recorrencias.Add(new Favoa.Core.Financas.Recorrencia
+        {
+            Descricao = "Aluguel", ValorCentavos = 100000, DiaDoMes = 5, Inicio = new DateOnly(2026, 1, 5),
+            CategoriaId = (await db.Categorias.FirstAsync()).Id, ContaId = (await db.Contas.FirstAsync()).Id,
+        });
+        await db.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task Zerar_financas_limpa_so_a_casa_pedida_e_mantem_contas_categorias_e_orcamento()
+    {
+        await PrepararFinancas(_ana);
+        await PrepararFinancas(_bia);
+        var antesAna = await FotoFinancas(_ana);
+        var antesBia = await FotoFinancas(_bia);
+        Assert.True(antesAna.Lancamentos >= 2 && antesAna.Fixas == 1 && antesAna.Orcamento == 300000);
+
+        var pasta = Directory.CreateTempSubdirectory("favoa-zerar-").FullName;
+        try
+        {
+            var dados = new DadosFavoa(_fabrica, new OpcoesFavoa { PastaDados = pasta });
+            Assert.Equal(new ContagemFinancas(antesAna.Lancamentos, 1), await dados.ContarFinancasAsync(_ana.FamiliaId));
+
+            var r = await dados.ZerarFinancasAsync(_ana.FamiliaId, apagarContasFixas: false);
+            Assert.True(r.Sucesso, r.Mensagem);
+            Assert.True(File.Exists(r.BackupAntes));
+            Assert.True(VerificadorBackup.Verificar(r.BackupAntes!).Ok);
+
+            var depoisAna = await FotoFinancas(_ana);
+            Assert.Equal(0, depoisAna.Lancamentos);
+            Assert.Equal((antesAna.Fixas, antesAna.Contas, antesAna.Categorias, antesAna.Orcamento), (depoisAna.Fixas, depoisAna.Contas, depoisAna.Categorias, depoisAna.Orcamento));
+            Assert.Equal(antesBia, await FotoFinancas(_bia)); // a outra casa não muda nada
+
+            // A conta fixa mantida não recria o passado apagado.
+            await using (var db = await Abrir(_ana))
+                Assert.Equal(DateOnly.FromDateTime(DateTime.Now), (await db.Recorrencias.SingleAsync()).UltimaOcorrencia);
+
+            // Opcional: apagar também as contas fixas.
+            var r2 = await dados.ZerarFinancasAsync(_ana.FamiliaId, apagarContasFixas: true);
+            Assert.True(r2.Sucesso, r2.Mensagem);
+            Assert.Equal(0, (await FotoFinancas(_ana)).Fixas);
+            Assert.Equal(antesBia, await FotoFinancas(_bia));
+
+            Assert.False((await dados.ZerarFinancasAsync(Guid.NewGuid(), false)).Sucesso);
+        }
+        finally { SqliteConnection.ClearAllPools(); Directory.Delete(pasta, true); }
     }
 }

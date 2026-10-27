@@ -97,6 +97,40 @@ public sealed class DadosFavoa(IDbContextFactory<FavoaDbContext> fabrica, Opcoes
             backup);
     }
 
+    public async Task<ContagemFinancas> ContarFinancasAsync(Guid familiaId, CancellationToken ct = default)
+    {
+        await using var db = await fabrica.CreateDbContextAsync(ct);
+        return new ContagemFinancas(
+            await db.Lancamentos.CountAsync(x => x.FamiliaId == familiaId, ct),
+            await db.Recorrencias.CountAsync(x => x.FamiliaId == familiaId, ct));
+    }
+
+    public async Task<ResultadoImportacao> ZerarFinancasAsync(Guid familiaId, bool apagarContasFixas, CancellationToken ct = default)
+    {
+        await using var db = await fabrica.CreateDbContextAsync(ct); // sem casa atual: o filtro não atrapalha, a casa vai explícita em cada comando
+        if (!await db.Familias.AnyAsync(f => f.Id == familiaId, ct)) return new ResultadoImportacao(false, "Essa casa não existe.", null);
+        var backup = await CopiarBanco(db, "antes-de-zerar-financas", ct);
+
+        await using var transacao = await db.Database.BeginTransactionAsync(ct);
+        var lancamentos = await db.Lancamentos.Where(x => x.FamiliaId == familiaId).ExecuteDeleteAsync(ct);
+        var fixas = 0;
+        if (apagarContasFixas)
+            fixas = await db.Recorrencias.Where(x => x.FamiliaId == familiaId).ExecuteDeleteAsync(ct);
+        else
+        {
+            // As contas fixas ficam, mas não recriam o passado apagado: só lançam datas depois de hoje.
+            var hoje = DateOnly.FromDateTime(DateTime.Now);
+            await db.Recorrencias.Where(x => x.FamiliaId == familiaId && (x.UltimaOcorrencia == null || x.UltimaOcorrencia < hoje))
+                .ExecuteUpdateAsync(u => u.SetProperty(x => x.UltimaOcorrencia, (DateOnly?)hoje), ct);
+        }
+        await transacao.CommitAsync(ct);
+
+        return new ResultadoImportacao(true,
+            $"Finanças zeradas: {lancamentos} lançamento(s)" + (apagarContasFixas ? $" e {fixas} conta(s) fixa(s)" : "") + " apagados. "
+            + $"Contas, categorias, limites e orçamento continuam. Se precisar voltar, o backup {Path.GetFileName(backup)} tem tudo como estava.",
+            backup);
+    }
+
     public async Task<string> FazerBackupAgoraAsync(CancellationToken ct = default)
     {
         await using var db = await fabrica.CreateDbContextAsync(ct);

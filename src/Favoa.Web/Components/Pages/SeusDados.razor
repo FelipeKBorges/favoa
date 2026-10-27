@@ -37,6 +37,39 @@
 
         <PessoasAcesso />
 
+        @if (PessoaAtual is Favoa.Web.PessoaDoUsuario { Dono: true } && PessoaAtual.FamiliaId is { } familiaFin)
+        {
+            <section class="cartao dados__bloco" aria-labelledby="t-zerar-fin">
+                <h2 id="t-zerar-fin" class="rotulo">Zerar o histórico financeiro</h2>
+                <p class="dados__aviso">
+                    Apaga os <strong>lançamentos da sua casa</strong> (@(_fin?.Lancamentos ?? 0) hoje) para recomeçar o acompanhamento do zero.
+                    Ficam as contas, as categorias, os limites e o orçamento do mês. Nada de treino, dieta, tarefas, hábitos ou diário é mexido,
+                    e a outra casa não é afetada. Antes, o Fávoa salva um backup.
+                </p>
+                @if (!_confirmandoFin)
+                {
+                    <div class="dados__acoes">
+                        <button type="button" class="botao botao--perigo-texto" @onclick="() => _confirmandoFin = true">Zerar finanças…</button>
+                    </div>
+                }
+                else
+                {
+                    <label class="campo campo--check">
+                        <input type="checkbox" @bind="_apagarFixas" />
+                        <span>Apagar também as contas fixas (@(_fin?.ContasFixas ?? 0)). Se não marcar, elas continuam e só lançam a partir de amanhã.</span>
+                    </label>
+                    <div class="campo">
+                        <label for="confirma-fin">Para confirmar, escreva ZERAR</label>
+                        <input id="confirma-fin" type="text" autocomplete="off" @bind="_textoFin" @bind:event="oninput" />
+                    </div>
+                    <div class="dados__acoes">
+                        <button type="button" class="botao botao--perigo" disabled="@(_ocupado || _textoFin?.Trim().ToUpperInvariant() != "ZERAR")" @onclick="() => ZerarFinancas(familiaFin)">Apagar o histórico</button>
+                        <button type="button" class="botao botao--fantasma" @onclick="CancelarFin">Cancelar</button>
+                    </div>
+                }
+            </section>
+        }
+
         @if (!_administra)
         {
             <p class="dados__dica">Backup, exportar e importar ficam com quem criou a conta da família.</p>
@@ -147,7 +180,7 @@
 
             <section class="cartao dados__bloco" aria-labelledby="t-zerar">
                 <h2 id="t-zerar" class="rotulo">Começar do zero</h2>
-                <p class="dados__dica">
+                <p class="dados__aviso">
                     Apaga os registros de <strong>todos da casa</strong>: lançamentos, recorrências, tarefas, hábitos, água, treinos feitos,
                     refeições, peso, lembretes e projetos. Ficam as pessoas e os acessos, os aparelhos com notificação, as configurações e metas,
                     as contas, as categorias com limite, as fichas de treino e o plano da dieta. Antes, o Fávoa salva um backup.
@@ -200,6 +233,32 @@
     private bool _confirmandoZerar;
     private string? _textoZerar;
     private bool _administra;
+    private ContagemFinancas? _fin;
+    private bool _confirmandoFin, _apagarFixas;
+    private string? _textoFin;
+
+    private void CancelarFin()
+    {
+        _confirmandoFin = false;
+        _apagarFixas = false;
+        _textoFin = null;
+    }
+
+    private async Task ZerarFinancas(Guid familiaId)
+    {
+        if (_ocupado) return;
+        _ocupado = true;
+        try
+        {
+            var r = await Dados.ZerarFinancasAsync(familiaId, _apagarFixas);
+            Eventos.MostrarMensagem(r.Mensagem);
+            CancelarFin();
+            _fin = await Dados.ContarFinancasAsync(familiaId);
+            await Recarregar();
+            await Eventos.NotificarRegistroSalvoAsync();
+        }
+        finally { _ocupado = false; }
+    }
 
     private void CancelarZerar()
     {
@@ -225,6 +284,7 @@
     {
         // Backup, exportar, importar e recomeçar valem para a base inteira: só o dono da casa, e só enquanto há uma família.
         _administra = PessoaAtual is Favoa.Web.PessoaDoUsuario { Dono: true } && await Dados.BancoDeUmaFamiliaAsync();
+        if (PessoaAtual is Favoa.Web.PessoaDoUsuario { Dono: true } && PessoaAtual.FamiliaId is { } fam) _fin = await Dados.ContarFinancasAsync(fam);
         await Recarregar();
     }
 

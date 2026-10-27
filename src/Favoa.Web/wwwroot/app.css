@@ -1005,6 +1005,9 @@ kbd {
 .dados__meta { font-size: 13px; color: var(--texto-apagado); }
 .dados__dica { margin: 0; font-size: 14px; color: var(--texto-suave); line-height: 1.5; }
 .dados__dica strong { color: var(--texto); }
+/* Explicação de ação que apaga dados: aparece também no celular (o .dados__dica some lá para aliviar a tela). */
+.dados__aviso { margin: 0; font-size: 14px; color: var(--texto-suave); line-height: 1.5; }
+.dados__aviso strong { color: var(--texto); }
 .dados__backups { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .dados__backups li { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--borda); font-size: 15px; }
 .dados__backups li:last-child { border-bottom: 0; }
